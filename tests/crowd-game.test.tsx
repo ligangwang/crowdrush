@@ -68,6 +68,10 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
       load: calls.load as DingnGame["progress"]["load"],
       save: calls.save as DingnGame["progress"]["save"],
     },
+    rewards: {
+      unlock: async () => ({ new: true, coins: 10 }),
+      list: async () => [],
+    },
     requestSignIn: calls.signIn,
     navigate: calls.navigate,
     ready() {},

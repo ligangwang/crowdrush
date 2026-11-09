@@ -1,10 +1,213 @@
 {
   "id": "crowdrush",
-  "version": "1.0.0",
-  "title": { "en": "Crowd Rush", "zh": "人潮突击" },
+  "version": "1.1.0",
+  "title": {
+    "en": "Crowd Rush",
+    "zh": "人潮突击"
+  },
   "description": {
     "en": "A 3D crowd runner: grow your squad through number gates, blast crates and monsters, and take down the boss at the end of every level.",
     "zh": "3D 人潮跑酷：穿过数字门壮大队伍，击碎箱子和怪物，在每关结尾打败首领。"
   },
-  "entry": "index.html"
+  "entry": "index.html",
+  "badges": [
+    {
+      "id": "first-win",
+      "tier": "bronze",
+      "icon": "boss",
+      "title": {
+        "en": "Beat your first boss",
+        "zh": "打败第一个首领"
+      }
+    },
+    {
+      "id": "three-stars",
+      "tier": "silver",
+      "icon": "stars",
+      "title": {
+        "en": "Clear a level with 3 stars",
+        "zh": "三星通关"
+      }
+    },
+    {
+      "id": "level-5",
+      "tier": "bronze",
+      "level": 5,
+      "title": {
+        "en": "Clear level 5",
+        "zh": "通过第 5 关"
+      }
+    },
+    {
+      "id": "level-10",
+      "tier": "bronze",
+      "level": 10,
+      "title": {
+        "en": "Clear level 10",
+        "zh": "通过第 10 关"
+      }
+    },
+    {
+      "id": "level-15",
+      "tier": "bronze",
+      "level": 15,
+      "title": {
+        "en": "Clear level 15",
+        "zh": "通过第 15 关"
+      }
+    },
+    {
+      "id": "level-20",
+      "tier": "bronze",
+      "level": 20,
+      "title": {
+        "en": "Clear level 20",
+        "zh": "通过第 20 关"
+      }
+    },
+    {
+      "id": "level-25",
+      "tier": "silver",
+      "level": 25,
+      "title": {
+        "en": "Clear level 25",
+        "zh": "通过第 25 关"
+      }
+    },
+    {
+      "id": "level-30",
+      "tier": "silver",
+      "level": 30,
+      "title": {
+        "en": "Clear level 30",
+        "zh": "通过第 30 关"
+      }
+    },
+    {
+      "id": "level-35",
+      "tier": "silver",
+      "level": 35,
+      "title": {
+        "en": "Clear level 35",
+        "zh": "通过第 35 关"
+      }
+    },
+    {
+      "id": "level-40",
+      "tier": "silver",
+      "level": 40,
+      "title": {
+        "en": "Clear level 40",
+        "zh": "通过第 40 关"
+      }
+    },
+    {
+      "id": "level-45",
+      "tier": "silver",
+      "level": 45,
+      "title": {
+        "en": "Clear level 45",
+        "zh": "通过第 45 关"
+      }
+    },
+    {
+      "id": "level-50",
+      "tier": "gold",
+      "level": 50,
+      "title": {
+        "en": "Clear level 50",
+        "zh": "通过第 50 关"
+      }
+    },
+    {
+      "id": "level-55",
+      "tier": "gold",
+      "level": 55,
+      "title": {
+        "en": "Clear level 55",
+        "zh": "通过第 55 关"
+      }
+    },
+    {
+      "id": "level-60",
+      "tier": "gold",
+      "level": 60,
+      "title": {
+        "en": "Clear level 60",
+        "zh": "通过第 60 关"
+      }
+    },
+    {
+      "id": "level-65",
+      "tier": "gold",
+      "level": 65,
+      "title": {
+        "en": "Clear level 65",
+        "zh": "通过第 65 关"
+      }
+    },
+    {
+      "id": "level-70",
+      "tier": "gold",
+      "level": 70,
+      "title": {
+        "en": "Clear level 70",
+        "zh": "通过第 70 关"
+      }
+    },
+    {
+      "id": "level-75",
+      "tier": "gold",
+      "level": 75,
+      "title": {
+        "en": "Clear level 75",
+        "zh": "通过第 75 关"
+      }
+    },
+    {
+      "id": "level-80",
+      "tier": "diamond",
+      "level": 80,
+      "title": {
+        "en": "Clear level 80",
+        "zh": "通过第 80 关"
+      }
+    },
+    {
+      "id": "level-85",
+      "tier": "diamond",
+      "level": 85,
+      "title": {
+        "en": "Clear level 85",
+        "zh": "通过第 85 关"
+      }
+    },
+    {
+      "id": "level-90",
+      "tier": "diamond",
+      "level": 90,
+      "title": {
+        "en": "Clear level 90",
+        "zh": "通过第 90 关"
+      }
+    },
+    {
+      "id": "level-95",
+      "tier": "diamond",
+      "level": 95,
+      "title": {
+        "en": "Clear level 95",
+        "zh": "通过第 95 关"
+      }
+    },
+    {
+      "id": "level-100",
+      "tier": "diamond",
+      "level": 100,
+      "title": {
+        "en": "Clear level 100",
+        "zh": "通过第 100 关"
+      }
+    }
+  ]
 }
