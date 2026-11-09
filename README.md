@@ -23,15 +23,27 @@ playground needs).
 
 ## Release a new version
 
-1. Bump `version` in `game.json`. Every upload needs a new version.
-2. Run `npm run pack`. It builds the game and writes
-   `release/crowd-<version>.zip`.
-3. Upload the zip on <https://dingn.com/developers/games/>. It becomes the
-   game's beta, then goes live once it is approved.
+1. In a pull request, raise `version` in `game.json`. Every release needs a
+   new version.
+2. Merge it. The **Build and publish** Action tests the game, builds
+   `release/crowd-<version>.zip` and uploads it to dingn with the
+   `DINGN_UPLOAD_KEY` secret.
+3. The new version waits in dingn's review queue and goes live once it is
+   approved.
 
-You can also let GitHub build it: every push to `main` keeps the zip as a
-workflow artifact of **Build release zip**, and pushing a tag `v<version>`
-attaches it to a GitHub release.
+A merge that doesn't raise the version builds and tests but uploads nothing.
+Every run also keeps the zip as a workflow artifact.
+
+To upload by hand instead: `npm run pack`, then upload the zip on
+<https://dingn.com/developers/games/>, or run
+`DINGN_UPLOAD_KEY=... npm run upload`.
+
+### The upload key
+
+Create a key on <https://dingn.com/developers/games/> (signed in as the
+account that owns the game), then add it to this repository under
+**Settings → Secrets and variables → Actions** as `DINGN_UPLOAD_KEY`. dingn
+shows the key once; if it is lost, revoke it and create another.
 
 ## The dingn SDK
 
