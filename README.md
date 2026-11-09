@@ -2,7 +2,7 @@
 
 A 3D crowd runner for [dingn](https://dingn.com): grow your squad through
 number gates, blast crates and monsters, and take down the boss at the end of
-every level. Play it at <https://dingn.com/crowd/>.
+every level. Play it at <https://dingn.com/play/crowdrush/>.
 
 Crowd Rush is published on dingn the same way as any outside developer's game:
 a zip uploaded on [My games](https://dingn.com/developers/games/) and approved
@@ -26,7 +26,7 @@ playground needs).
 1. In a pull request, raise `version` in `game.json`. Every release needs a
    new version.
 2. Merge it. The **Build and publish** Action tests the game, builds
-   `release/crowd-<version>.zip` and uploads it to dingn with the
+   `release/crowdrush-<version>.zip` and uploads it to dingn with the
    `DINGN_UPLOAD_KEY` secret.
 3. The new version waits in dingn's review queue and goes live once it is
    approved.
