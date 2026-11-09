@@ -253,6 +253,10 @@ export function CrowdGame() {
         storeLocal(merged);
         setBest(merged.best);
         setSynced(true);
+        // A returning player gets the badges for levels they cleared before
+        // badges existed (or on another device) right away, in one popup.
+        if (merged.best > 0)
+          void badges.current?.cleared(sdkRef.current, merged.best, 0);
         const w = world.current;
         if (w.phase === "ready" && w.level < merged.level) load(merged.level);
         if (!sameProgress(merged, remote))
