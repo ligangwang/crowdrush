@@ -5,14 +5,27 @@ import type { DingnGame } from "../sdk/dingn-sdk.js";
 export type Tier = "bronze" | "silver" | "gold" | "diamond";
 
 /** A level badge every 5 levels up to 100, rising through the tiers. */
-export const LEVEL_MILESTONES = Array.from({ length: 20 }, (_, i) => (i + 1) * 5);
+export const LEVEL_MILESTONES = Array.from(
+  { length: 20 },
+  (_, i) => (i + 1) * 5,
+);
 export const tierFor = (level: number): Tier =>
-  level >= 80 ? "diamond" : level >= 50 ? "gold" : level >= 25 ? "silver" : "bronze";
+  level >= 80
+    ? "diamond"
+    : level >= 50
+      ? "gold"
+      : level >= 25
+        ? "silver"
+        : "bronze";
 export const levelBadge = (level: number) => `level-${level}`;
 export const FIRST_WIN = "first-win";
 export const THREE_STARS = "three-stars";
 
-/** Every badge a cleared level qualifies for, including earlier milestones. */
+/**
+ * Every badge a cleared level qualifies for, including earlier milestones.
+ * At sign-in the game passes the player's best level with 0 stars, which
+ * catches them up on level badges they earned before.
+ */
 export function badgesFor(level: number, stars: number) {
   return [
     FIRST_WIN,

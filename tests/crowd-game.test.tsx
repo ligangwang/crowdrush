@@ -8,10 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type {
-  DingnGame,
-  Locale,
-} from "../sdk/dingn-sdk.js";
+import type { DingnGame, Locale } from "../sdk/dingn-sdk.js";
 import { CrowdGame } from "../src/crowd-game";
 import { DingnProvider } from "../src/dingn";
 import { loadStore } from "../src/crowd-shared";
@@ -103,6 +100,31 @@ test("starts at the saved level and names the game for screen readers", async ()
     await screen.findByRole("heading", { name: "Crowd Rush" }),
   ).toBeTruthy();
   expect(screen.getAllByText("Level 4").length).toBeGreaterThan(0);
+});
+
+test("a returning player gets badges for levels cleared before, at sign-in", async () => {
+  fakeSdk(true);
+  const unlocked: string[] = [];
+  sdk.rewards.list = async () => [
+    { id: "level-5", earned: true } as Awaited<
+      ReturnType<DingnGame["rewards"]["list"]>
+    >[number],
+  ];
+  sdk.rewards.unlock = async (id) => {
+    unlocked.push(id);
+    return { new: true, coins: 10 };
+  };
+  calls.load.mockResolvedValue({ level: 35, best: 34 });
+  await play();
+  await waitFor(() => expect(unlocked).toContain("level-30"));
+  expect(unlocked).toEqual([
+    "first-win",
+    "level-10",
+    "level-15",
+    "level-20",
+    "level-25",
+    "level-30",
+  ]);
 });
 
 test("levels 1 to 5 play without an account", async () => {
