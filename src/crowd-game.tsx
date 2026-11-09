@@ -65,6 +65,10 @@ export function CrowdGame() {
   // the player signs in or out.
   const badges = useRef<ReturnType<typeof createBadgeTracker> | null>(null);
   badges.current ??= createBadgeTracker();
+  // The game loop keeps its first closure, so it reads the SDK (and whether
+  // the player is signed in now) through this ref.
+  const sdkRef = useRef(sdk);
+  sdkRef.current = sdk;
   useEffect(() => badges.current?.reset(), [sdk.player.signedIn]);
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -283,7 +287,7 @@ export function CrowdGame() {
       setPhase(w.phase);
       if (w.phase === "won") {
         setResult({ count: w.count, stars: stars(w) });
-        void badges.current?.cleared(sdk, w.level, stars(w));
+        void badges.current?.cleared(sdkRef.current, w.level, stars(w));
         const saved = mergeProgress(localProgress(), {
           level: w.level + 1,
           best: w.level,
