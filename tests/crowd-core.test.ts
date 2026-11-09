@@ -113,6 +113,20 @@ test("a sensible player clears the opening levels and most of the first twenty",
   assert.ok(wins >= 17, `won ${wins} of 20`);
 });
 
+test("levels 1 to 10 are eased in, and the easing is gone from level 11", () => {
+  // the boss's summon interval before easing (hard = level + 3)
+  const unsoftened = (lv: number) => Math.max(1.2, 2.6 - (lv + 3) * 0.06);
+  let last = Infinity;
+  for (let lv = 1; lv <= 12; lv++) {
+    const ratio = newLevel(lv).boss.summonEvery / unsoftened(lv);
+    if (lv <= 10) assert.ok(ratio > 1 && ratio < last, `level ${lv}: ${ratio}`);
+    else assert.equal(ratio, 1);
+    last = ratio;
+  }
+  // level 1 is about 30% gentler
+  assert.ok(Math.abs(newLevel(1).boss.summonEvery / unsoftened(1) - 1 / 0.7) < 1e-9);
+});
+
 test("difficulty keeps climbing with no last level", () => {
   const threat = (lv: number) => {
     const w = newLevel(lv);
