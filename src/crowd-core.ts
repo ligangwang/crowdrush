@@ -123,6 +123,8 @@ export type World = {
   power: number;
   /** Fire-rate upgrades collected from rate crates. */
   rapid: number;
+  /** Permanent upgrades the player bought; none by default. */
+  perks: Perks;
   fireClock: number;
   time: number;
   shotsFired: number;
@@ -193,10 +195,24 @@ export function fireRate(count: number) {
   return Math.min(20, 4.5 + Math.sqrt(count) * 1.2);
 }
 export const MAX_POWER = 4;
+/**
+ * Permanent upgrades bought with dingn coins (crowd-upgrades.ts), up to 3
+ * tiers each. Fire rate rises 10% a tier; power gives each shot a 15% chance
+ * a tier of hitting twice as hard (a critical hit), so damage stays whole.
+ */
+export type Perks = { power: number; rate: number };
+export const RATE_PERK = 0.1;
+export const CRIT_PERK = 0.15;
 export const MAX_RAPID = 4;
 /** Shots per second for this squad, including rate upgrades. */
-export function shotRate(w: Pick<World, "count" | "rapid">) {
-  return fireRate(w.count) * (1 + 0.35 * w.rapid);
+export function shotRate(
+  w: Pick<World, "count" | "rapid"> & { perks?: Perks },
+) {
+  return (
+    fireRate(w.count) *
+    (1 + 0.35 * w.rapid) *
+    (1 + RATE_PERK * (w.perks?.rate ?? 0))
+  );
 }
 
 /**
@@ -548,6 +564,7 @@ export function newLevel(level: number): World {
     bullets: [],
     power: 1,
     rapid: 0,
+    perks: { power: 0, rate: 0 },
     fireClock: 0,
     time: 0,
     shotsFired: 0,
@@ -667,7 +684,11 @@ export function step(w: World, dt: number) {
     w.bullets.push({
       x: w.x + (w.random() * 2 - 1) * r * 0.7,
       z: w.z + 0.8,
-      dmg: w.power,
+      // an upgraded weapon sometimes lands a critical hit
+      dmg:
+        w.perks.power > 0 && w.random() < CRIT_PERK * w.perks.power
+          ? w.power * 2
+          : w.power,
       dead: false,
     });
   }

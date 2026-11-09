@@ -1,6 +1,6 @@
 {
   "id": "crowdrush",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "title": {
     "en": "Crowd Rush",
     "zh": "人潮突击"
@@ -208,6 +208,60 @@
         "en": "Clear level 100",
         "zh": "通过第 100 关"
       }
+    }
+  ],
+  "shop": [
+    {
+      "id": "power-1",
+      "price": 50,
+      "title": {
+        "en": "Power +1",
+        "zh": "火力 +1"
+      }
+    },
+    {
+      "id": "power-2",
+      "price": 120,
+      "title": {
+        "en": "Power +2",
+        "zh": "火力 +2"
+      },
+      "requires": "power-1"
+    },
+    {
+      "id": "power-3",
+      "price": 250,
+      "title": {
+        "en": "Power +3",
+        "zh": "火力 +3"
+      },
+      "requires": "power-2"
+    },
+    {
+      "id": "rate-1",
+      "price": 50,
+      "title": {
+        "en": "Fire rate +1",
+        "zh": "射速 +1"
+      }
+    },
+    {
+      "id": "rate-2",
+      "price": 120,
+      "title": {
+        "en": "Fire rate +2",
+        "zh": "射速 +2"
+      },
+      "requires": "rate-1"
+    },
+    {
+      "id": "rate-3",
+      "price": 250,
+      "title": {
+        "en": "Fire rate +3",
+        "zh": "射速 +3"
+      },
+      "requires": "rate-2"
     }
   ]
 }

@@ -34,7 +34,9 @@ export function badgesFor(level: number, stars: number) {
   ];
 }
 
-type Badged = Pick<DingnGame, "rewards" | "player">;
+type Badged = Pick<DingnGame, "player"> & {
+  rewards: Pick<DingnGame["rewards"], "unlock" | "list">;
+};
 
 /**
  * Unlocks the badges a cleared level earned, skipping ones the player already

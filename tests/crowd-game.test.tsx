@@ -68,6 +68,8 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
     rewards: {
       unlock: async () => ({ new: true, coins: 10 }),
       list: async () => [],
+      spend: async () => ({ new: true, coins: 50 }),
+      shop: async () => [],
     },
     requestSignIn: calls.signIn,
     navigate: calls.navigate,
@@ -125,6 +127,46 @@ test("a returning player gets badges for levels cleared before, at sign-in", asy
     "level-25",
     "level-30",
   ]);
+});
+
+test("a signed-in player buys upgrades with dingn coins on the start screen", async () => {
+  fakeSdk(true);
+  const owned = new Set<string>();
+  const spent: string[] = [];
+  sdk.rewards.shop = async () =>
+    ["power-1", "power-2", "power-3", "rate-1", "rate-2", "rate-3"].map(
+      (id) => ({ id, price: 50, title: id, owned: owned.has(id) }),
+    );
+  sdk.rewards.spend = async (id) => {
+    spent.push(id);
+    owned.add(id);
+    return { new: true, coins: 50 };
+  };
+  await play({ level: "3" });
+  const buy = await screen.findByRole("button", {
+    name: "Buy Power +1 for 50 coins",
+  });
+  await act(async () => fireEvent.click(buy));
+  expect(spent).toEqual(["power-1"]);
+  expect(
+    await screen.findByRole("button", { name: "Buy Power +2 for 120 coins" }),
+  ).toBeTruthy();
+  // a player without enough coins is told how to earn them
+  sdk.rewards.spend = async () => {
+    throw Object.assign(new Error("poor"), { code: "not_enough_coins" });
+  };
+  await act(async () =>
+    fireEvent.click(
+      screen.getByRole("button", { name: "Buy Fire rate +1 for 50 coins" }),
+    ),
+  );
+  expect(await screen.findByText(/You need 50 dingn coins/)).toBeTruthy();
+});
+
+test("signed-out players see no upgrade shop", async () => {
+  await play({ level: "2" });
+  expect(await screen.findByRole("button", { name: "Start" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Buy / })).toBeNull();
 });
 
 test("levels 1 to 5 play without an account", async () => {
