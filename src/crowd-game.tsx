@@ -22,6 +22,7 @@ import {
   type World,
 } from "./crowd-core";
 import type { CrowdScene, SceneFx } from "./crowd-scene";
+import { createBadgeTracker } from "./crowd-badges";
 
 const TEAM = "#3ea6ff";
 const RIVAL = "#ff5a5f";
@@ -60,6 +61,11 @@ export function CrowdGame() {
   const sessionReady = true;
   const uidRef = useRef<string | null>(null);
   uidRef.current = user ? user.name || "player" : null;
+  // dingn badges for cleared levels (crowd-badges.ts), checked again whenever
+  // the player signs in or out.
+  const badges = useRef<ReturnType<typeof createBadgeTracker> | null>(null);
+  badges.current ??= createBadgeTracker();
+  useEffect(() => badges.current?.reset(), [sdk.player.signedIn]);
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
@@ -277,6 +283,7 @@ export function CrowdGame() {
       setPhase(w.phase);
       if (w.phase === "won") {
         setResult({ count: w.count, stars: stars(w) });
+        void badges.current?.cleared(sdk, w.level, stars(w));
         const saved = mergeProgress(localProgress(), {
           level: w.level + 1,
           best: w.level,
