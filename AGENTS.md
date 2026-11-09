@@ -7,6 +7,8 @@ Notes for AI coding agents working on Crowd Rush.
   game talks to it only through the SDK in `sdk/`. Don't import from the
   dingn repo. Refresh `sdk/` with `npm run update-sdk`.
 - Run `npm test` before committing. `npm run pack` builds the upload zip.
+- Merging to `main` publishes on dingn (`.github/workflows/release.yml`)
+  when `version` in `game.json` is new.
 - Bump `version` in `game.json` for every release; dingn refuses a version it
   already has.
 - Save with `sdk.storage` / `sdk.progress`, never `localStorage` or cookies,
