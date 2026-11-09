@@ -1,0 +1,43 @@
+# Tests the game and builds the zip to upload on https://dingn.com/developers/games/.
+# Every run keeps the zip as a workflow artifact. Pushing a tag such as
+# v1.0.1 (matching "version" in game.json) also attaches it to a GitHub release.
+name: Build release zip
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run pack
+      - name: Check the tag matches game.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version=$(node -p 'require("./game.json").version')
+          [ "${GITHUB_REF_NAME}" = "v$version" ] || { echo "Tag ${GITHUB_REF_NAME} does not match game.json version $version"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crowd-zip
+          path: release/*.zip
+      - name: Attach the zip to a GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/*.zip --title "Crowd Rush $GITHUB_REF_NAME" --generate-notes
