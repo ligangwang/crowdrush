@@ -152,6 +152,7 @@ export function CrowdGame() {
   async function buy(kind: UpgradeKind) {
     const next = nextUpgrade(kind, perksRef.current);
     if (!next || buying) return;
+    if (!uidRef.current) return sdk.requestSignIn();
     setBuying(kind);
     setShopNote("");
     setPoor(null);
@@ -753,123 +754,127 @@ export function CrowdGame() {
             <button type="button" className="button" onClick={begin}>
               {t("Start")}
             </button>
-            {user && (
-              <div
-                className="crowd-shop"
-                role="group"
-                aria-label={t("Upgrades")}
-              >
-                <p className="crowd-shop-title">
-                  {t("Upgrades")}
-                  <span>{t("Permanent, paid with dingn coins")}</span>
-                </p>
-                {UPGRADE_KINDS.map((kind) => {
-                  const next = nextUpgrade(kind, perks);
-                  const name = kind === "power" ? t("Power") : t("Fire rate");
-                  const per = kind === "power" ? CRIT_PERK : RATE_PERK;
-                  const pct = (tier: number) => Math.round(per * tier * 100);
-                  const label =
-                    kind === "power" ? t("2× damage chance") : t("Fire speed");
-                  const value = (tier: number) =>
-                    kind === "power" ? `${pct(tier)}%` : `+${pct(tier)}%`;
-                  return (
-                    <div
-                      key={kind}
-                      className={`crowd-shop-row${next ? " can-buy" : ""}`}
-                      // the whole row upgrades too; the button is for keyboards
-                      onClick={() => next && void buy(kind)}
-                    >
-                      <span className={`crowd-shop-icon ${kind}`} aria-hidden />
-                      <span className="crowd-shop-info">
-                        <span className="crowd-shop-name">
-                          {name}
-                          <span
-                            className="crowd-shop-tiers"
-                            aria-label={t(`Level ${perks[kind]} of ${TIERS}`)}
-                          >
-                            {Array.from({ length: TIERS }, (_, i) => (
-                              <i
-                                key={i}
-                                className={i < perks[kind] ? "on" : ""}
-                              />
-                            ))}
-                          </span>
-                        </span>
-                        <span className="crowd-shop-effect">
-                          {label}{" "}
-                          {next ? (
-                            <>
-                              {perks[kind] > 0 && (
-                                <>
-                                  {value(perks[kind])}
-                                  <b aria-hidden> → </b>
-                                </>
-                              )}
-                              <em>{value(next.tier)}</em>
-                            </>
-                          ) : (
-                            <em>{value(perks[kind])}</em>
-                          )}
-                        </span>
-                      </span>
-                      {next ? (
-                        <button
-                          type="button"
-                          className={`crowd-shop-buy${poor?.kind === kind ? " poor" : ""}`}
-                          disabled={!!buying}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void buy(kind);
-                          }}
-                          aria-label={t(
-                            `Buy ${name} +${next.tier} for ${next.price} coins`,
-                          )}
+            {/* Signed-out players see the upgrades too; buying asks them
+                to sign in first, since coins belong to a dingn account. */}
+            <div className="crowd-shop" role="group" aria-label={t("Upgrades")}>
+              <p className="crowd-shop-title">
+                {t("Upgrades")}
+                <span>
+                  {user
+                    ? t("Permanent, paid with dingn coins")
+                    : t("Sign in to buy with dingn coins")}
+                </span>
+              </p>
+              {UPGRADE_KINDS.map((kind) => {
+                const next = nextUpgrade(kind, perks);
+                const name = kind === "power" ? t("Power") : t("Fire rate");
+                const per = kind === "power" ? CRIT_PERK : RATE_PERK;
+                const pct = (tier: number) => Math.round(per * tier * 100);
+                const label =
+                  kind === "power" ? t("2× damage chance") : t("Fire speed");
+                const value = (tier: number) =>
+                  kind === "power" ? `${pct(tier)}%` : `+${pct(tier)}%`;
+                return (
+                  <div
+                    key={kind}
+                    className={`crowd-shop-row${next ? " can-buy" : ""}`}
+                    // the whole row upgrades too; the button is for keyboards
+                    onClick={() => next && void buy(kind)}
+                  >
+                    <span className={`crowd-shop-icon ${kind}`} aria-hidden />
+                    <span className="crowd-shop-info">
+                      <span className="crowd-shop-name">
+                        {name}
+                        <span
+                          className="crowd-shop-tiers"
+                          aria-label={t(`Level ${perks[kind]} of ${TIERS}`)}
                         >
-                          <span className="crowd-shop-buy-label">
-                            <span aria-hidden>▲</span> {t("Upgrade")}
-                          </span>
-                          <span className="crowd-shop-buy-price">
-                            <span className="crowd-coin" aria-hidden />
-                            {next.price}
-                          </span>
-                        </button>
-                      ) : (
-                        <span className="crowd-shop-max">{t("Max")}</span>
-                      )}
-                    </div>
-                  );
-                })}
-                {poor && (
-                  <div className="crowd-shop-poor" role="alert">
-                    <span className="crowd-shop-poor-icon" aria-hidden>
-                      <span className="crowd-coin" />
-                    </span>
-                    <span className="crowd-shop-poor-text">
-                      <strong>{t("Not enough coins")}</strong>
-                      <span>
-                        {t(
-                          `${poor.kind === "power" ? t("Power") : t("Fire rate")} +${poor.tier} costs ${poor.price} coins.`,
-                        )}
+                          {Array.from({ length: TIERS }, (_, i) => (
+                            <i
+                              key={i}
+                              className={i < perks[kind] ? "on" : ""}
+                            />
+                          ))}
+                        </span>
                       </span>
-                      <span>
-                        {t(
-                          "Earn more by clearing levels for badges, or by taking out enemies even when a level fails.",
+                      <span className="crowd-shop-effect">
+                        {label}{" "}
+                        {next ? (
+                          <>
+                            {perks[kind] > 0 && (
+                              <>
+                                {value(perks[kind])}
+                                <b aria-hidden> → </b>
+                              </>
+                            )}
+                            <em>{value(next.tier)}</em>
+                          </>
+                        ) : (
+                          <em>{value(perks[kind])}</em>
                         )}
                       </span>
                     </span>
-                    <button
-                      type="button"
-                      className="crowd-shop-poor-close"
-                      onClick={() => setPoor(null)}
-                      aria-label={t("Close")}
-                    >
-                      ×
-                    </button>
+                    {next ? (
+                      <button
+                        type="button"
+                        className={`crowd-shop-buy${poor?.kind === kind ? " poor" : ""}`}
+                        disabled={!!buying}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void buy(kind);
+                        }}
+                        aria-label={
+                          user
+                            ? t(
+                                `Buy ${name} +${next.tier} for ${next.price} coins`,
+                              )
+                            : t(`Sign in to buy ${name} +${next.tier}`)
+                        }
+                      >
+                        <span className="crowd-shop-buy-label">
+                          <span aria-hidden>▲</span> {t("Upgrade")}
+                        </span>
+                        <span className="crowd-shop-buy-price">
+                          <span className="crowd-coin" aria-hidden />
+                          {next.price}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="crowd-shop-max">{t("Max")}</span>
+                    )}
                   </div>
-                )}
-                {shopNote && <p className="crowd-shop-note">{shopNote}</p>}
-              </div>
-            )}
+                );
+              })}
+              {poor && (
+                <div className="crowd-shop-poor" role="alert">
+                  <span className="crowd-shop-poor-icon" aria-hidden>
+                    <span className="crowd-coin" />
+                  </span>
+                  <span className="crowd-shop-poor-text">
+                    <strong>{t("Not enough coins")}</strong>
+                    <span>
+                      {t(
+                        `${poor.kind === "power" ? t("Power") : t("Fire rate")} +${poor.tier} costs ${poor.price} coins.`,
+                      )}
+                    </span>
+                    <span>
+                      {t(
+                        "Earn more by clearing levels for badges, or by taking out enemies even when a level fails.",
+                      )}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="crowd-shop-poor-close"
+                    onClick={() => setPoor(null)}
+                    aria-label={t("Close")}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              {shopNote && <p className="crowd-shop-note">{shopNote}</p>}
+            </div>
           </div>
         )}
         {phase === "won" && (

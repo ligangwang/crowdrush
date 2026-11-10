@@ -166,10 +166,14 @@ test("a signed-in player buys upgrades with dingn coins on the start screen", as
   expect(screen.getByText(/costs 50 coins/)).toBeTruthy();
 });
 
-test("signed-out players see no upgrade shop", async () => {
+test("signed-out players see the upgrades, and buying asks them to sign in", async () => {
   await play({ level: "2" });
   expect(await screen.findByRole("button", { name: "Start" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: /^Buy / })).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Sign in to buy Power +1" }),
+  );
+  expect(calls.signIn).toHaveBeenCalled();
 });
 
 test("levels 1 to 5 play without an account", async () => {
