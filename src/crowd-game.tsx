@@ -14,6 +14,8 @@ import {
 import {
   CRIT_PERK,
   RATE_PERK,
+  defeated,
+  lossCoins,
   newLevel,
   progress,
   stars,
@@ -113,6 +115,13 @@ export function CrowdGame() {
   const [level, setLevel] = useState(1);
   const [best, setBest] = useState(0);
   const [result, setResult] = useState({ count: 0, stars: 0 });
+  // A failed level still pays dingn coins for the enemies destroyed: the
+  // share destroyed, and coins paid (null while asking, or signed out).
+  const [loss, setLoss] = useState<{
+    share: number;
+    coins: number | null;
+    limit: boolean;
+  }>({ share: 0, coins: null, limit: false });
   const [sound, setSound] = useState(true);
   const [noGl, setNoGl] = useState(false);
   const [weapon, setWeapon] = useState({ power: 1, rapid: 0 });
@@ -339,6 +348,21 @@ export function CrowdGame() {
     }
     if (was !== w.phase) {
       setPhase(w.phase);
+      if (w.phase === "lost") {
+        const coins = lossCoins(w);
+        setLoss({ share: defeated(w), coins: null, limit: false });
+        if (coins > 0 && uidRef.current)
+          sdkRef.current.rewards
+            .earn(coins)
+            .then((paid) =>
+              setLoss((l) => ({
+                ...l,
+                coins: paid.coins,
+                limit: paid.coins < coins,
+              })),
+            )
+            .catch((err) => console.warn("Crowd Rush coins", err));
+      }
       if (w.phase === "won") {
         setResult({ count: w.count, stars: stars(w) });
         void badges.current?.cleared(sdkRef.current, w.level, stars(w));
@@ -734,7 +758,11 @@ export function CrowdGame() {
               {t("Start")}
             </button>
             {user && (
-              <div className="crowd-shop" role="group" aria-label={t("Upgrades")}>
+              <div
+                className="crowd-shop"
+                role="group"
+                aria-label={t("Upgrades")}
+              >
                 <p className="crowd-shop-title">
                   {t("Upgrades")}
                   <span>{t("Permanent, paid with dingn coins")}</span>
@@ -759,7 +787,10 @@ export function CrowdGame() {
                             aria-label={t(`Level ${perks[kind]} of ${TIERS}`)}
                           >
                             {Array.from({ length: TIERS }, (_, i) => (
-                              <i key={i} className={i < perks[kind] ? "on" : ""} />
+                              <i
+                                key={i}
+                                className={i < perks[kind] ? "on" : ""}
+                              />
                             ))}
                           </span>
                         </span>
@@ -839,6 +870,36 @@ export function CrowdGame() {
         {phase === "lost" && (
           <div className="crowd-overlay">
             <h2>{t("Squad wiped out")}</h2>
+            {loss.share > 0 && (
+              <p className="crowd-loss">
+                {t(
+                  `You took out ${Math.round(loss.share * 100)}% of the enemies.`,
+                )}
+                {loss.coins != null && loss.coins > 0 && (
+                  <span className="crowd-loss-coins">
+                    <span className="crowd-coin" aria-hidden />
+                    {t(`+${loss.coins} coins`)}
+                  </span>
+                )}
+                {loss.limit && (
+                  <span className="crowd-loss-note">
+                    {t(
+                      "Daily coin limit reached. Come back tomorrow for more.",
+                    )}
+                  </span>
+                )}
+                {!user && lossCoins(world.current) > 0 && (
+                  <span className="crowd-loss-note">
+                    {t("Sign in to earn coins for that.")}
+                  </span>
+                )}
+                {user && lossCoins(world.current) === 0 && (
+                  <span className="crowd-loss-note">
+                    {t("Take out 20% to earn a coin.")}
+                  </span>
+                )}
+              </p>
+            )}
             <p>
               {t(
                 "Pick the bigger gate and shoot the crates for extra recruits.",

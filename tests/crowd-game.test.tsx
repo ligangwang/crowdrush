@@ -70,6 +70,7 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
       list: async () => [],
       spend: async () => ({ new: true, coins: 50 }),
       shop: async () => [],
+      earn: async (coins) => ({ coins, left: 30 - coins }),
     },
     requestSignIn: calls.signIn,
     navigate: calls.navigate,

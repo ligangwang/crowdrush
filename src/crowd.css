@@ -386,3 +386,35 @@
   margin: 0;
   font-size: 0.85rem;
 }
+
+/* What a failed level still earned. */
+.crowd-overlay .crowd-loss {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #fff;
+  font-weight: 600;
+}
+.crowd-loss-coins {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 6px;
+  border-radius: 999px;
+  background: #ffe08a;
+  color: #2a2208;
+  font-weight: 800;
+  animation: crowd-coins-in 0.4s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.crowd-loss-note {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #c4ccda;
+}
+@keyframes crowd-coins-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}

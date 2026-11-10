@@ -67,7 +67,11 @@ test("only badges the player doesn't have yet are unlocked", async () => {
   assert.deepEqual(await tracker.cleared(sdk, 11, 3), [THREE_STARS]);
   assert.deepEqual(sent, ["level-5", "level-10", THREE_STARS]);
   assert.deepEqual(
-    await tracker.cleared({ ...sdk, player: { ...sdk.player, signedIn: false } }, 20, 3),
+    await tracker.cleared(
+      { ...sdk, player: { ...sdk.player, signedIn: false } },
+      20,
+      3,
+    ),
     [],
   );
 });
