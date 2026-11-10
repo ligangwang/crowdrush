@@ -122,13 +122,6 @@
 .crowd-stars span {
   color: #ffffff30;
 }
-.crowd-hint {
-  margin: 0;
-  padding: 6px 12px;
-  text-align: center;
-  font-size: 13px;
-  color: #9aa3b5;
-}
 @media (max-width: 640px) {
   .crowd-hud {
     padding: 8px 10px;

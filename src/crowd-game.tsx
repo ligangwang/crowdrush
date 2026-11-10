@@ -113,7 +113,6 @@ export function CrowdGame() {
   });
   const [phase, setPhase] = useState<World["phase"]>("ready");
   const [level, setLevel] = useState(1);
-  const [best, setBest] = useState(0);
   const [result, setResult] = useState({ count: 0, stars: 0 });
   // A failed level still pays dingn coins for the enemies destroyed: the
   // share destroyed, and coins paid (null while asking, or signed out).
@@ -164,7 +163,6 @@ export function CrowdGame() {
     else if (result === "failed")
       setShopNote(tRef.current("The upgrade shop is unavailable right now."));
   }
-  const [synced, setSynced] = useState(false);
   const locked = needsSignIn(level, !!user);
 
   function load(lv: number) {
@@ -212,8 +210,7 @@ export function CrowdGame() {
     let disposed = false;
     let raf = 0;
     let observer: ResizeObserver | undefined;
-    const { level: saved, best: savedBest } = localProgress();
-    setBest(savedBest);
+    const { level: saved } = localProgress();
     const s = read(STORE.sound) !== "off";
     setSound(s);
     sfx.current = new Sfx();
@@ -305,7 +302,6 @@ export function CrowdGame() {
   // whichever got further, so nothing played signed out is lost.
   const uid = user ? user.name || "player" : undefined;
   useEffect(() => {
-    setSynced(false);
     if (!uid) return;
     let active = true;
     readCrowdProgress(sdk)
@@ -313,8 +309,6 @@ export function CrowdGame() {
         if (!active) return;
         const merged = mergeProgress(localProgress(), remote);
         storeLocal(merged);
-        setBest(merged.best);
-        setSynced(true);
         // A returning player gets the badges for levels they cleared before
         // badges existed (or on another device) right away, in one popup.
         if (merged.best > 0)
@@ -374,7 +368,6 @@ export function CrowdGame() {
           best: w.level,
         });
         storeLocal(saved);
-        setBest(saved.best);
         const uid = uidRef.current;
         if (uid)
           saveCrowdProgress(sdk, saved).catch((err) =>
@@ -942,24 +935,6 @@ export function CrowdGame() {
           </div>
         )}
       </div>
-      <p className="crowd-hint">
-        {user && synced
-          ? t("Progress is saved to your account.")
-          : t("Progress is saved on this device only.")}
-        {best > 0 && <> {t(`Furthest level cleared: ${best}`)}</>}
-        {!user && (
-          <>
-            {" "}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => sdk.requestSignIn()}
-            >
-              {t("Sign in to save it across devices.")}
-            </button>
-          </>
-        )}
-      </p>
     </div>
   );
 }
