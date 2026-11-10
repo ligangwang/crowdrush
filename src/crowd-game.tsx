@@ -12,6 +12,8 @@ import {
   type CrowdProgress,
 } from "./crowd-progress";
 import {
+  CRIT_PERK,
+  RATE_PERK,
   newLevel,
   progress,
   stars,
@@ -732,20 +734,51 @@ export function CrowdGame() {
               {t("Start")}
             </button>
             {user && (
-              <div className="crowd-shop" aria-label={t("Upgrades")}>
+              <div className="crowd-shop" role="group" aria-label={t("Upgrades")}>
+                <p className="crowd-shop-title">
+                  {t("Upgrades")}
+                  <span>{t("Permanent, paid with dingn coins")}</span>
+                </p>
                 {UPGRADE_KINDS.map((kind) => {
                   const next = nextUpgrade(kind, perks);
                   const name = kind === "power" ? t("Power") : t("Fire rate");
+                  const per = kind === "power" ? CRIT_PERK : RATE_PERK;
+                  const pct = (tier: number) => Math.round(per * tier * 100);
+                  const label =
+                    kind === "power" ? t("Double damage") : t("Fire speed");
+                  const value = (tier: number) =>
+                    kind === "power" ? `${pct(tier)}%` : `+${pct(tier)}%`;
                   return (
                     <div key={kind} className="crowd-shop-row">
-                      <span className="crowd-shop-name">{name}</span>
-                      <span
-                        className="crowd-shop-tiers"
-                        aria-label={t(`${perks[kind]} of ${TIERS}`)}
-                      >
-                        {Array.from({ length: TIERS }, (_, i) => (
-                          <i key={i} className={i < perks[kind] ? "on" : ""} />
-                        ))}
+                      <span className={`crowd-shop-icon ${kind}`} aria-hidden />
+                      <span className="crowd-shop-info">
+                        <span className="crowd-shop-name">
+                          {name}
+                          <span
+                            className="crowd-shop-tiers"
+                            aria-label={t(`Level ${perks[kind]} of ${TIERS}`)}
+                          >
+                            {Array.from({ length: TIERS }, (_, i) => (
+                              <i key={i} className={i < perks[kind] ? "on" : ""} />
+                            ))}
+                          </span>
+                        </span>
+                        <span className="crowd-shop-effect">
+                          {label}{" "}
+                          {next ? (
+                            <>
+                              {perks[kind] > 0 && (
+                                <>
+                                  {value(perks[kind])}
+                                  <b aria-hidden> → </b>
+                                </>
+                              )}
+                              <em>{value(next.tier)}</em>
+                            </>
+                          ) : (
+                            <em>{value(perks[kind])}</em>
+                          )}
+                        </span>
                       </span>
                       {next ? (
                         <button

@@ -254,33 +254,95 @@
 
 /* Upgrades bought with dingn coins, on the start screen. */
 .crowd-shop {
-  margin: 16px auto 0;
-  width: min(280px, 100%);
+  margin: 20px auto 0;
+  width: min(300px, 100%);
   display: grid;
   gap: 8px;
+  text-align: left;
+}
+.crowd-overlay .crowd-shop-title {
+  margin: 0 0 2px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.crowd-overlay .crowd-shop-title span {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.75;
 }
 .crowd-shop-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px 6px 12px;
-  border-radius: 12px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 14px;
   background: #ffffff14;
-  text-align: left;
+  border: 1px solid #ffffff1a;
+}
+.crowd-shop-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
+}
+.crowd-shop-icon.power {
+  background: #ff7a5933;
+}
+.crowd-shop-icon.power::before {
+  content: "💥";
+}
+.crowd-shop-icon.rate {
+  background: #59c3ff33;
+}
+.crowd-shop-icon.rate::before {
+  content: "⚡";
+}
+.crowd-shop-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 .crowd-shop-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
+}
+.crowd-shop-effect {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+.crowd-shop-effect b {
+  font-weight: 400;
+  opacity: 0.7;
+}
+.crowd-shop-effect em {
+  font-style: normal;
+  font-weight: 700;
+  color: #ffd25e;
 }
 .crowd-shop-tiers {
   display: inline-flex;
-  gap: 4px;
+  gap: 3px;
 }
 .crowd-shop-tiers i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: 12px;
+  height: 4px;
+  border-radius: 2px;
   background: #ffffff33;
 }
 .crowd-shop-tiers i.on {
