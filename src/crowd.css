@@ -342,20 +342,60 @@
   background: #ffd25e;
   box-shadow: 0 0 6px #ffd25e;
 }
+.crowd-shop-row.can-buy {
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.crowd-shop-row.can-buy:hover {
+  background: #ffffff1f;
+  border-color: #ffd25e66;
+}
+/* A clear call to action: "▲ Upgrade" over its price. */
 .crowd-shop-buy {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 64px;
-  justify-content: center;
-  padding: 5px 10px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 86px;
+  padding: 6px 12px 5px;
   border: 0;
-  border-radius: 999px;
-  background: #ffe08a;
+  border-radius: 12px;
+  background: linear-gradient(#ffe7a1, #ffc94a);
+  box-shadow:
+    0 3px 0 #b8861d,
+    0 6px 14px #0005;
   color: #2a2208;
   font: inherit;
   font-weight: 800;
   cursor: pointer;
+  transition: transform 0.1s;
+}
+.crowd-shop-buy:hover {
+  transform: translateY(-1px);
+}
+.crowd-shop-buy:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 1px 0 #b8861d,
+    0 3px 8px #0005;
+}
+.crowd-shop-buy-label {
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.crowd-shop-buy-label span {
+  font-size: 0.65rem;
+}
+.crowd-shop-buy-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 3px;
+  border-radius: 999px;
+  background: #2a22081a;
+  font-size: 0.78rem;
 }
 .crowd-shop-buy:disabled {
   opacity: 0.6;
@@ -476,7 +516,10 @@
   cursor: pointer;
 }
 .crowd-shop-buy.poor {
-  background: #ffb39a;
+  background: linear-gradient(#ffc4ae, #ff9b7a);
+  box-shadow:
+    0 3px 0 #b4532f,
+    0 6px 14px #0005;
   animation: crowd-poor-shake 0.4s;
 }
 @keyframes crowd-poor-in {

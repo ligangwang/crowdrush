@@ -773,7 +773,12 @@ export function CrowdGame() {
                   const value = (tier: number) =>
                     kind === "power" ? `${pct(tier)}%` : `+${pct(tier)}%`;
                   return (
-                    <div key={kind} className="crowd-shop-row">
+                    <div
+                      key={kind}
+                      className={`crowd-shop-row${next ? " can-buy" : ""}`}
+                      // the whole row upgrades too; the button is for keyboards
+                      onClick={() => next && void buy(kind)}
+                    >
                       <span className={`crowd-shop-icon ${kind}`} aria-hidden />
                       <span className="crowd-shop-info">
                         <span className="crowd-shop-name">
@@ -812,13 +817,21 @@ export function CrowdGame() {
                           type="button"
                           className={`crowd-shop-buy${poor?.kind === kind ? " poor" : ""}`}
                           disabled={!!buying}
-                          onClick={() => void buy(kind)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void buy(kind);
+                          }}
                           aria-label={t(
                             `Buy ${name} +${next.tier} for ${next.price} coins`,
                           )}
                         >
-                          <span className="crowd-coin" aria-hidden />
-                          {next.price}
+                          <span className="crowd-shop-buy-label">
+                            <span aria-hidden>▲</span> {t("Upgrade")}
+                          </span>
+                          <span className="crowd-shop-buy-price">
+                            <span className="crowd-coin" aria-hidden />
+                            {next.price}
+                          </span>
                         </button>
                       ) : (
                         <span className="crowd-shop-max">{t("Max")}</span>
