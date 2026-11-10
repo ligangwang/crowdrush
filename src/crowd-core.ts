@@ -873,3 +873,24 @@ export function stars(w: World) {
 export function progress(w: World) {
   return Math.min(1, w.z / Math.max(1, w.boss.z - BOSS_STOP));
 }
+
+/**
+ * How much of a level's enemies the squad destroyed, from 0 to 1: the share
+ * of road monsters shot down and the share of the boss's health taken, half
+ * each (all boss when the road has no monsters). Monsters the boss summons
+ * don't count.
+ */
+export function defeated(w: World) {
+  const road = w.things.filter(
+    (t): t is Monster => t.kind === "monster" && !t.minion,
+  );
+  const boss = 1 - w.boss.hp / Math.max(1, w.boss.maxHp);
+  if (!road.length) return boss;
+  const killed = road.filter((m) => m.dead && m.hp <= 0).length;
+  return (killed / road.length + boss) / 2;
+}
+
+/** dingn coins for a failed level: 1 for every 20% of the enemies destroyed. */
+export const LOSS_COINS = 5;
+export const lossCoins = (w: World) =>
+  Math.floor(defeated(w) * LOSS_COINS + 1e-9);

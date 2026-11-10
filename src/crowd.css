@@ -122,13 +122,6 @@
 .crowd-stars span {
   color: #ffffff30;
 }
-.crowd-hint {
-  margin: 0;
-  padding: 6px 12px;
-  text-align: center;
-  font-size: 13px;
-  color: #9aa3b5;
-}
 @media (max-width: 640px) {
   .crowd-hud {
     padding: 8px 10px;
@@ -254,53 +247,155 @@
 
 /* Upgrades bought with dingn coins, on the start screen. */
 .crowd-shop {
-  margin: 16px auto 0;
-  width: min(280px, 100%);
+  margin: 20px auto 0;
+  width: min(300px, 100%);
   display: grid;
   gap: 8px;
+  text-align: left;
+}
+.crowd-overlay .crowd-shop-title {
+  margin: 0 0 2px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.crowd-overlay .crowd-shop-title span {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.75;
 }
 .crowd-shop-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px 6px 12px;
-  border-radius: 12px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 14px;
   background: #ffffff14;
-  text-align: left;
+  border: 1px solid #ffffff1a;
+}
+.crowd-shop-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
+}
+.crowd-shop-icon.power {
+  background: #ff7a5933;
+}
+.crowd-shop-icon.power::before {
+  content: "💥";
+}
+.crowd-shop-icon.rate {
+  background: #59c3ff33;
+}
+.crowd-shop-icon.rate::before {
+  content: "⚡";
+}
+.crowd-shop-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 .crowd-shop-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
+}
+.crowd-shop-effect {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+.crowd-shop-effect b {
+  font-weight: 400;
+  opacity: 0.7;
+}
+.crowd-shop-effect em {
+  font-style: normal;
+  font-weight: 700;
+  color: #ffd25e;
 }
 .crowd-shop-tiers {
   display: inline-flex;
-  gap: 4px;
+  gap: 3px;
 }
 .crowd-shop-tiers i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: 12px;
+  height: 4px;
+  border-radius: 2px;
   background: #ffffff33;
 }
 .crowd-shop-tiers i.on {
   background: #ffd25e;
   box-shadow: 0 0 6px #ffd25e;
 }
+.crowd-shop-row.can-buy {
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.crowd-shop-row.can-buy:hover {
+  background: #ffffff1f;
+  border-color: #ffd25e66;
+}
+/* A clear call to action: "▲ Upgrade" over its price. */
 .crowd-shop-buy {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 64px;
-  justify-content: center;
-  padding: 5px 10px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 86px;
+  padding: 6px 12px 5px;
   border: 0;
-  border-radius: 999px;
-  background: #ffe08a;
+  border-radius: 12px;
+  background: linear-gradient(#ffe7a1, #ffc94a);
+  box-shadow:
+    0 3px 0 #b8861d,
+    0 6px 14px #0005;
   color: #2a2208;
   font: inherit;
   font-weight: 800;
   cursor: pointer;
+  transition: transform 0.1s;
+}
+.crowd-shop-buy:hover {
+  transform: translateY(-1px);
+}
+.crowd-shop-buy:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 1px 0 #b8861d,
+    0 3px 8px #0005;
+}
+.crowd-shop-buy-label {
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.crowd-shop-buy-label span {
+  font-size: 0.65rem;
+}
+.crowd-shop-buy-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 3px;
+  border-radius: 999px;
+  background: #2a22081a;
+  font-size: 0.78rem;
 }
 .crowd-shop-buy:disabled {
   opacity: 0.6;
@@ -323,4 +418,123 @@
 .crowd-shop-note {
   margin: 0;
   font-size: 0.85rem;
+}
+
+/* What a failed level still earned. */
+.crowd-overlay .crowd-loss {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #fff;
+  font-weight: 600;
+}
+.crowd-loss-coins {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 6px;
+  border-radius: 999px;
+  background: #ffe08a;
+  color: #2a2208;
+  font-weight: 800;
+  animation: crowd-coins-in 0.4s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.crowd-loss-note {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #c4ccda;
+}
+@keyframes crowd-coins-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/* "Not enough coins", easy to see on the start screen. */
+.crowd-shop-poor {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 8px 10px 12px;
+  border-radius: 14px;
+  border: 1.5px solid #ff9f6b;
+  background: #3a1f17f0;
+  box-shadow: 0 8px 22px #0006;
+  text-align: left;
+  animation: crowd-poor-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.crowd-shop-poor-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #ff9f6b33;
+}
+.crowd-shop-poor-icon .crowd-coin {
+  width: 18px;
+  height: 18px;
+  filter: grayscale(0.5);
+}
+.crowd-shop-poor-icon::after {
+  content: "!";
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff6b4a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 14px;
+  text-align: center;
+}
+.crowd-shop-poor-text {
+  display: grid;
+  gap: 2px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #ffd9c7;
+}
+.crowd-shop-poor-text strong {
+  font-size: 0.95rem;
+  color: #fff;
+}
+.crowd-shop-poor-close {
+  border: 0;
+  background: none;
+  color: #ffd9c7;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.crowd-shop-buy.poor {
+  background: linear-gradient(#ffc4ae, #ff9b7a);
+  box-shadow:
+    0 3px 0 #b4532f,
+    0 6px 14px #0005;
+  animation: crowd-poor-shake 0.4s;
+}
+@keyframes crowd-poor-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+}
+@keyframes crowd-poor-shake {
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
 }

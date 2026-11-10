@@ -70,6 +70,7 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
       list: async () => [],
       spend: async () => ({ new: true, coins: 50 }),
       shop: async () => [],
+      earn: async (coins) => ({ coins, left: 30 - coins }),
     },
     requestSignIn: calls.signIn,
     navigate: calls.navigate,
@@ -160,7 +161,9 @@ test("a signed-in player buys upgrades with dingn coins on the start screen", as
       screen.getByRole("button", { name: "Buy Fire rate +1 for 50 coins" }),
     ),
   );
-  expect(await screen.findByText(/You need 50 dingn coins/)).toBeTruthy();
+  expect(await screen.findByRole("alert")).toBeTruthy();
+  expect(screen.getByText("Not enough coins")).toBeTruthy();
+  expect(screen.getByText(/costs 50 coins/)).toBeTruthy();
 });
 
 test("signed-out players see no upgrade shop", async () => {
@@ -175,10 +178,8 @@ test("levels 1 to 5 play without an account", async () => {
   expect(
     screen.queryByRole("heading", { name: "Save your progress to keep going" }),
   ).toBeNull();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Sign in to save it across devices." }),
-  );
-  expect(calls.signIn).toHaveBeenCalled();
+  // no sign-in nag before level 6
+  expect(screen.queryByText(/Progress is saved/)).toBeNull();
 });
 
 test("level 6 asks a signed-out player to sign in, with a way back", async () => {
@@ -215,7 +216,6 @@ test("signed-in players play past level 5 and merge progress with the account", 
   expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
   await waitFor(() => expect(stored.get("level")).toBe("9"));
   expect(stored.get("best")).toBe("8");
-  expect(screen.getByText(/Progress is saved to your account\./)).toBeTruthy();
   // the account already had the furthest progress, so nothing is written
   expect(calls.save).not.toHaveBeenCalled();
 });

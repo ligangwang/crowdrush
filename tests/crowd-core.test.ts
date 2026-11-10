@@ -5,6 +5,8 @@ import {
   BOSS_REACH,
   BOSS_STOP,
   crowdRadius,
+  defeated,
+  lossCoins,
   newLevel,
   progress,
   RUN_SPEED,
@@ -124,7 +126,9 @@ test("levels 1 to 10 are eased in, and the easing is gone from level 11", () => 
     last = ratio;
   }
   // level 1 is about 30% gentler
-  assert.ok(Math.abs(newLevel(1).boss.summonEvery / unsoftened(1) - 1 / 0.7) < 1e-9);
+  assert.ok(
+    Math.abs(newLevel(1).boss.summonEvery / unsoftened(1) - 1 / 0.7) < 1e-9,
+  );
 });
 
 test("difficulty keeps climbing with no last level", () => {
@@ -406,4 +410,30 @@ test("a strong shot that kills a slime carries on into the next one", () => {
   step(w, 1 / 30);
   step(w, 1 / 30);
   assert.ok(w.things.every((t) => t.kind === "monster" && t.dead));
+});
+
+test("a failed level pays a coin for every 20% of the enemies destroyed", () => {
+  const w = newLevel(4);
+  const road = w.things.filter((t) => t.kind === "monster");
+  assert.equal(defeated(w), 0);
+  assert.equal(lossCoins(w), 0);
+  // half the road's monsters shot down, the boss untouched: 25%
+  road.slice(0, road.length / 2).forEach((m) => {
+    m.dead = true;
+    m.hp = 0;
+  });
+  if (road.length % 2 === 0) assert.equal(defeated(w), 0.25);
+  // monsters that bit the squad or were passed don't count
+  road.slice(road.length / 2).forEach((m) => (m.dead = true));
+  assert.ok(defeated(w) <= 0.25);
+  // every monster down and the boss at half health: 75%, 3 coins
+  road.forEach((m) => (m.hp = 0));
+  w.boss.hp = w.boss.maxHp / 2;
+  assert.equal(defeated(w), 0.75);
+  assert.equal(lossCoins(w), 3);
+  // the boss's minions are left out
+  w.things.push({ ...road[0], id: 999, minion: true, dead: false, hp: 5 });
+  assert.equal(defeated(w), 0.75);
+  w.boss.hp = 0;
+  assert.equal(lossCoins(w), 5);
 });

@@ -12,6 +12,10 @@ import {
   type CrowdProgress,
 } from "./crowd-progress";
 import {
+  CRIT_PERK,
+  RATE_PERK,
+  defeated,
+  lossCoins,
   newLevel,
   progress,
   stars,
@@ -109,8 +113,14 @@ export function CrowdGame() {
   });
   const [phase, setPhase] = useState<World["phase"]>("ready");
   const [level, setLevel] = useState(1);
-  const [best, setBest] = useState(0);
   const [result, setResult] = useState({ count: 0, stars: 0 });
+  // A failed level still pays dingn coins for the enemies destroyed: the
+  // share destroyed, and coins paid (null while asking, or signed out).
+  const [loss, setLoss] = useState<{
+    share: number;
+    coins: number | null;
+    limit: boolean;
+  }>({ share: 0, coins: null, limit: false });
   const [sound, setSound] = useState(true);
   const [noGl, setNoGl] = useState(false);
   const [weapon, setWeapon] = useState({ power: 1, rapid: 0 });
@@ -120,6 +130,12 @@ export function CrowdGame() {
   perksRef.current = perks;
   const [buying, setBuying] = useState<UpgradeKind | null>(null);
   const [shopNote, setShopNote] = useState("");
+  // The upgrade the player couldn't afford, shown as a notice on the panel.
+  const [poor, setPoor] = useState<{
+    kind: UpgradeKind;
+    tier: number;
+    price: number;
+  } | null>(null);
   useEffect(() => {
     let active = true;
     void loadPerks(sdk).then((p) => active && setPerks(p));
@@ -138,19 +154,15 @@ export function CrowdGame() {
     if (!next || buying) return;
     setBuying(kind);
     setShopNote("");
+    setPoor(null);
     const result: BuyResult = await buyUpgrade(sdk, next.id);
     setBuying(null);
     if (result === "bought") setPerks(await loadPerks(sdk));
     else if (result === "poor")
-      setShopNote(
-        tRef.current(
-          `You need ${next.price} dingn coins. Earn them with badges for clearing levels.`,
-        ),
-      );
+      setPoor({ kind, tier: next.tier, price: next.price });
     else if (result === "failed")
       setShopNote(tRef.current("The upgrade shop is unavailable right now."));
   }
-  const [synced, setSynced] = useState(false);
   const locked = needsSignIn(level, !!user);
 
   function load(lv: number) {
@@ -198,8 +210,7 @@ export function CrowdGame() {
     let disposed = false;
     let raf = 0;
     let observer: ResizeObserver | undefined;
-    const { level: saved, best: savedBest } = localProgress();
-    setBest(savedBest);
+    const { level: saved } = localProgress();
     const s = read(STORE.sound) !== "off";
     setSound(s);
     sfx.current = new Sfx();
@@ -291,7 +302,6 @@ export function CrowdGame() {
   // whichever got further, so nothing played signed out is lost.
   const uid = user ? user.name || "player" : undefined;
   useEffect(() => {
-    setSynced(false);
     if (!uid) return;
     let active = true;
     readCrowdProgress(sdk)
@@ -299,8 +309,6 @@ export function CrowdGame() {
         if (!active) return;
         const merged = mergeProgress(localProgress(), remote);
         storeLocal(merged);
-        setBest(merged.best);
-        setSynced(true);
         // A returning player gets the badges for levels they cleared before
         // badges existed (or on another device) right away, in one popup.
         if (merged.best > 0)
@@ -337,6 +345,21 @@ export function CrowdGame() {
     }
     if (was !== w.phase) {
       setPhase(w.phase);
+      if (w.phase === "lost") {
+        const coins = lossCoins(w);
+        setLoss({ share: defeated(w), coins: null, limit: false });
+        if (coins > 0 && uidRef.current)
+          sdkRef.current.rewards
+            .earn(coins)
+            .then((paid) =>
+              setLoss((l) => ({
+                ...l,
+                coins: paid.coins,
+                limit: paid.coins < coins,
+              })),
+            )
+            .catch((err) => console.warn("Crowd Rush coins", err));
+      }
       if (w.phase === "won") {
         setResult({ count: w.count, stars: stars(w) });
         void badges.current?.cleared(sdkRef.current, w.level, stars(w));
@@ -345,7 +368,6 @@ export function CrowdGame() {
           best: w.level,
         });
         storeLocal(saved);
-        setBest(saved.best);
         const uid = uidRef.current;
         if (uid)
           saveCrowdProgress(sdk, saved).catch((err) =>
@@ -732,33 +754,84 @@ export function CrowdGame() {
               {t("Start")}
             </button>
             {user && (
-              <div className="crowd-shop" aria-label={t("Upgrades")}>
+              <div
+                className="crowd-shop"
+                role="group"
+                aria-label={t("Upgrades")}
+              >
+                <p className="crowd-shop-title">
+                  {t("Upgrades")}
+                  <span>{t("Permanent, paid with dingn coins")}</span>
+                </p>
                 {UPGRADE_KINDS.map((kind) => {
                   const next = nextUpgrade(kind, perks);
                   const name = kind === "power" ? t("Power") : t("Fire rate");
+                  const per = kind === "power" ? CRIT_PERK : RATE_PERK;
+                  const pct = (tier: number) => Math.round(per * tier * 100);
+                  const label =
+                    kind === "power" ? t("2× damage chance") : t("Fire speed");
+                  const value = (tier: number) =>
+                    kind === "power" ? `${pct(tier)}%` : `+${pct(tier)}%`;
                   return (
-                    <div key={kind} className="crowd-shop-row">
-                      <span className="crowd-shop-name">{name}</span>
-                      <span
-                        className="crowd-shop-tiers"
-                        aria-label={t(`${perks[kind]} of ${TIERS}`)}
-                      >
-                        {Array.from({ length: TIERS }, (_, i) => (
-                          <i key={i} className={i < perks[kind] ? "on" : ""} />
-                        ))}
+                    <div
+                      key={kind}
+                      className={`crowd-shop-row${next ? " can-buy" : ""}`}
+                      // the whole row upgrades too; the button is for keyboards
+                      onClick={() => next && void buy(kind)}
+                    >
+                      <span className={`crowd-shop-icon ${kind}`} aria-hidden />
+                      <span className="crowd-shop-info">
+                        <span className="crowd-shop-name">
+                          {name}
+                          <span
+                            className="crowd-shop-tiers"
+                            aria-label={t(`Level ${perks[kind]} of ${TIERS}`)}
+                          >
+                            {Array.from({ length: TIERS }, (_, i) => (
+                              <i
+                                key={i}
+                                className={i < perks[kind] ? "on" : ""}
+                              />
+                            ))}
+                          </span>
+                        </span>
+                        <span className="crowd-shop-effect">
+                          {label}{" "}
+                          {next ? (
+                            <>
+                              {perks[kind] > 0 && (
+                                <>
+                                  {value(perks[kind])}
+                                  <b aria-hidden> → </b>
+                                </>
+                              )}
+                              <em>{value(next.tier)}</em>
+                            </>
+                          ) : (
+                            <em>{value(perks[kind])}</em>
+                          )}
+                        </span>
                       </span>
                       {next ? (
                         <button
                           type="button"
-                          className="crowd-shop-buy"
+                          className={`crowd-shop-buy${poor?.kind === kind ? " poor" : ""}`}
                           disabled={!!buying}
-                          onClick={() => void buy(kind)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void buy(kind);
+                          }}
                           aria-label={t(
                             `Buy ${name} +${next.tier} for ${next.price} coins`,
                           )}
                         >
-                          <span className="crowd-coin" aria-hidden />
-                          {next.price}
+                          <span className="crowd-shop-buy-label">
+                            <span aria-hidden>▲</span> {t("Upgrade")}
+                          </span>
+                          <span className="crowd-shop-buy-price">
+                            <span className="crowd-coin" aria-hidden />
+                            {next.price}
+                          </span>
                         </button>
                       ) : (
                         <span className="crowd-shop-max">{t("Max")}</span>
@@ -766,6 +839,34 @@ export function CrowdGame() {
                     </div>
                   );
                 })}
+                {poor && (
+                  <div className="crowd-shop-poor" role="alert">
+                    <span className="crowd-shop-poor-icon" aria-hidden>
+                      <span className="crowd-coin" />
+                    </span>
+                    <span className="crowd-shop-poor-text">
+                      <strong>{t("Not enough coins")}</strong>
+                      <span>
+                        {t(
+                          `${poor.kind === "power" ? t("Power") : t("Fire rate")} +${poor.tier} costs ${poor.price} coins.`,
+                        )}
+                      </span>
+                      <span>
+                        {t(
+                          "Earn more by clearing levels for badges, or by taking out enemies even when a level fails.",
+                        )}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="crowd-shop-poor-close"
+                      onClick={() => setPoor(null)}
+                      aria-label={t("Close")}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
                 {shopNote && <p className="crowd-shop-note">{shopNote}</p>}
               </div>
             )}
@@ -806,6 +907,36 @@ export function CrowdGame() {
         {phase === "lost" && (
           <div className="crowd-overlay">
             <h2>{t("Squad wiped out")}</h2>
+            {loss.share > 0 && (
+              <p className="crowd-loss">
+                {t(
+                  `You took out ${Math.round(loss.share * 100)}% of the enemies.`,
+                )}
+                {loss.coins != null && loss.coins > 0 && (
+                  <span className="crowd-loss-coins">
+                    <span className="crowd-coin" aria-hidden />
+                    {t(`+${loss.coins} coins`)}
+                  </span>
+                )}
+                {loss.limit && (
+                  <span className="crowd-loss-note">
+                    {t(
+                      "Daily coin limit reached. Come back tomorrow for more.",
+                    )}
+                  </span>
+                )}
+                {!user && lossCoins(world.current) > 0 && (
+                  <span className="crowd-loss-note">
+                    {t("Sign in to earn coins for that.")}
+                  </span>
+                )}
+                {user && lossCoins(world.current) === 0 && (
+                  <span className="crowd-loss-note">
+                    {t("Take out 20% to earn a coin.")}
+                  </span>
+                )}
+              </p>
+            )}
             <p>
               {t(
                 "Pick the bigger gate and shoot the crates for extra recruits.",
@@ -817,24 +948,6 @@ export function CrowdGame() {
           </div>
         )}
       </div>
-      <p className="crowd-hint">
-        {user && synced
-          ? t("Progress is saved to your account.")
-          : t("Progress is saved on this device only.")}
-        {best > 0 && <> {t(`Furthest level cleared: ${best}`)}</>}
-        {!user && (
-          <>
-            {" "}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => sdk.requestSignIn()}
-            >
-              {t("Sign in to save it across devices.")}
-            </button>
-          </>
-        )}
-      </p>
     </div>
   );
 }
