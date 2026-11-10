@@ -251,3 +251,76 @@
     margin: 2px 0 6px;
   }
 }
+
+/* Upgrades bought with dingn coins, on the start screen. */
+.crowd-shop {
+  margin: 16px auto 0;
+  width: min(280px, 100%);
+  display: grid;
+  gap: 8px;
+}
+.crowd-shop-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: #ffffff14;
+  text-align: left;
+}
+.crowd-shop-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.crowd-shop-tiers {
+  display: inline-flex;
+  gap: 4px;
+}
+.crowd-shop-tiers i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff33;
+}
+.crowd-shop-tiers i.on {
+  background: #ffd25e;
+  box-shadow: 0 0 6px #ffd25e;
+}
+.crowd-shop-buy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 64px;
+  justify-content: center;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffe08a;
+  color: #2a2208;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.crowd-shop-buy:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.crowd-coin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff2bd, #f3c85c 60%, #b07818);
+  box-shadow: inset 0 0 0 1.5px #9a6512;
+}
+.crowd-shop-max {
+  min-width: 64px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #ffd25e;
+}
+.crowd-shop-note {
+  margin: 0;
+  font-size: 0.85rem;
+}

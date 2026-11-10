@@ -23,6 +23,16 @@ import {
 } from "./crowd-core";
 import type { CrowdScene, SceneFx } from "./crowd-scene";
 import { createBadgeTracker } from "./crowd-badges";
+import {
+  buyUpgrade,
+  loadPerks,
+  nextUpgrade,
+  TIERS,
+  UPGRADE_KINDS,
+  type BuyResult,
+  type UpgradeKind,
+} from "./crowd-upgrades";
+import type { Perks } from "./crowd-core";
 
 const TEAM = "#3ea6ff";
 const RIVAL = "#ff5a5f";
@@ -104,11 +114,48 @@ export function CrowdGame() {
   const [sound, setSound] = useState(true);
   const [noGl, setNoGl] = useState(false);
   const [weapon, setWeapon] = useState({ power: 1, rapid: 0 });
+  // Upgrades bought with dingn coins; every level starts with them.
+  const [perks, setPerks] = useState<Perks>({ power: 0, rate: 0 });
+  const perksRef = useRef(perks);
+  perksRef.current = perks;
+  const [buying, setBuying] = useState<UpgradeKind | null>(null);
+  const [shopNote, setShopNote] = useState("");
+  useEffect(() => {
+    let active = true;
+    void loadPerks(sdk).then((p) => active && setPerks(p));
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sdk.player.signedIn]);
+  // A level waiting to start picks up an upgrade bought just now.
+  useEffect(() => {
+    const w = world.current;
+    if (w.phase === "ready") w.perks = { ...perks };
+  }, [perks]);
+  async function buy(kind: UpgradeKind) {
+    const next = nextUpgrade(kind, perksRef.current);
+    if (!next || buying) return;
+    setBuying(kind);
+    setShopNote("");
+    const result: BuyResult = await buyUpgrade(sdk, next.id);
+    setBuying(null);
+    if (result === "bought") setPerks(await loadPerks(sdk));
+    else if (result === "poor")
+      setShopNote(
+        tRef.current(
+          `You need ${next.price} dingn coins. Earn them with badges for clearing levels.`,
+        ),
+      );
+    else if (result === "failed")
+      setShopNote(tRef.current("The upgrade shop is unavailable right now."));
+  }
   const [synced, setSynced] = useState(false);
   const locked = needsSignIn(level, !!user);
 
   function load(lv: number) {
     world.current = newLevel(lv);
+    world.current.perks = { ...perksRef.current };
     const f = fx.current;
     f.sparks = [];
     f.floats = [];
@@ -158,6 +205,7 @@ export function CrowdGame() {
     sfx.current = new Sfx();
     sfx.current.on = s;
     world.current = newLevel(saved);
+    world.current.perks = { ...perksRef.current };
     setLevel(saved);
     if (import.meta.env.DEV)
       (window as unknown as { __crowd?: typeof world }).__crowd = world;
@@ -683,6 +731,44 @@ export function CrowdGame() {
             <button type="button" className="button" onClick={begin}>
               {t("Start")}
             </button>
+            {user && (
+              <div className="crowd-shop" aria-label={t("Upgrades")}>
+                {UPGRADE_KINDS.map((kind) => {
+                  const next = nextUpgrade(kind, perks);
+                  const name = kind === "power" ? t("Power") : t("Fire rate");
+                  return (
+                    <div key={kind} className="crowd-shop-row">
+                      <span className="crowd-shop-name">{name}</span>
+                      <span
+                        className="crowd-shop-tiers"
+                        aria-label={t(`${perks[kind]} of ${TIERS}`)}
+                      >
+                        {Array.from({ length: TIERS }, (_, i) => (
+                          <i key={i} className={i < perks[kind] ? "on" : ""} />
+                        ))}
+                      </span>
+                      {next ? (
+                        <button
+                          type="button"
+                          className="crowd-shop-buy"
+                          disabled={!!buying}
+                          onClick={() => void buy(kind)}
+                          aria-label={t(
+                            `Buy ${name} +${next.tier} for ${next.price} coins`,
+                          )}
+                        >
+                          <span className="crowd-coin" aria-hidden />
+                          {next.price}
+                        </button>
+                      ) : (
+                        <span className="crowd-shop-max">{t("Max")}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {shopNote && <p className="crowd-shop-note">{shopNote}</p>}
+              </div>
+            )}
           </div>
         )}
         {phase === "won" && (

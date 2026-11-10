@@ -123,6 +123,8 @@ export type World = {
   power: number;
   /** Fire-rate upgrades collected from rate crates. */
   rapid: number;
+  /** Permanent upgrades the player bought; none by default. */
+  perks: Perks;
   fireClock: number;
   time: number;
   shotsFired: number;
@@ -193,10 +195,24 @@ export function fireRate(count: number) {
   return Math.min(20, 4.5 + Math.sqrt(count) * 1.2);
 }
 export const MAX_POWER = 4;
+/**
+ * Permanent upgrades bought with dingn coins (crowd-upgrades.ts), up to 3
+ * tiers each. Fire rate rises 10% a tier; power gives each shot a 15% chance
+ * a tier of hitting twice as hard (a critical hit), so damage stays whole.
+ */
+export type Perks = { power: number; rate: number };
+export const RATE_PERK = 0.1;
+export const CRIT_PERK = 0.15;
 export const MAX_RAPID = 4;
 /** Shots per second for this squad, including rate upgrades. */
-export function shotRate(w: Pick<World, "count" | "rapid">) {
-  return fireRate(w.count) * (1 + 0.35 * w.rapid);
+export function shotRate(
+  w: Pick<World, "count" | "rapid"> & { perks?: Perks },
+) {
+  return (
+    fireRate(w.count) *
+    (1 + 0.35 * w.rapid) *
+    (1 + RATE_PERK * (w.perks?.rate ?? 0))
+  );
 }
 
 /**
@@ -509,9 +525,20 @@ export function newLevel(level: number): World {
   }
   things.sort((a, b) => a.z - b.z);
 
+  // Levels 1 to 10 are eased in so new players find their feet: monsters
+  // and the boss are weaker and the boss is slower, by 30% on level 1,
+  // fading out level by level until it is gone from level 11 on. The track
+  // itself (gates, crates and walls) is the same.
+  const soften = 1 - 0.3 * (Math.max(0, 11 - lv) / 10);
+  for (const t of things)
+    if (t.kind === "monster") {
+      t.hp = t.maxHp = Math.max(1, Math.round(t.maxHp * soften));
+      t.bite = Math.max(1, Math.round(t.bite * soften));
+    }
+
   // seconds of full fire the boss soaks up, assuming every weapon crate
   const bossHp = Math.round(
-    fireRate(expected) * gun ** 0.9 * (5 + 2 * Math.sqrt(hard)),
+    fireRate(expected) * gun ** 0.9 * (5 + 2 * Math.sqrt(hard)) * soften,
   );
   return {
     level: lv,
@@ -529,14 +556,15 @@ export function newLevel(level: number): World {
       hp: bossHp,
       maxHp: bossHp,
       slam: 2.2,
-      slamEvery: Math.max(0.7, 1.8 - hard * 0.05),
+      slamEvery: Math.max(0.7, 1.8 - hard * 0.05) / soften,
       summon: 1.2,
-      summonEvery: Math.max(1.2, 2.6 - hard * 0.06),
+      summonEvery: Math.max(1.2, 2.6 - hard * 0.06) / soften,
       minions: Math.min(9, 2 + Math.floor(hard / 3)),
     },
     bullets: [],
     power: 1,
     rapid: 0,
+    perks: { power: 0, rate: 0 },
     fireClock: 0,
     time: 0,
     shotsFired: 0,
@@ -656,7 +684,11 @@ export function step(w: World, dt: number) {
     w.bullets.push({
       x: w.x + (w.random() * 2 - 1) * r * 0.7,
       z: w.z + 0.8,
-      dmg: w.power,
+      // an upgraded weapon sometimes lands a critical hit
+      dmg:
+        w.perks.power > 0 && w.random() < CRIT_PERK * w.perks.power
+          ? w.power * 2
+          : w.power,
       dead: false,
     });
   }
