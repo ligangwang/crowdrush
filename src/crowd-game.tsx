@@ -769,7 +769,7 @@ export function CrowdGame() {
                   const per = kind === "power" ? CRIT_PERK : RATE_PERK;
                   const pct = (tier: number) => Math.round(per * tier * 100);
                   const label =
-                    kind === "power" ? t("Double damage") : t("Fire speed");
+                    kind === "power" ? t("2× damage chance") : t("Fire speed");
                   const value = (tier: number) =>
                     kind === "power" ? `${pct(tier)}%` : `+${pct(tier)}%`;
                   return (
