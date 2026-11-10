@@ -131,6 +131,12 @@ export function CrowdGame() {
   perksRef.current = perks;
   const [buying, setBuying] = useState<UpgradeKind | null>(null);
   const [shopNote, setShopNote] = useState("");
+  // The upgrade the player couldn't afford, shown as a notice on the panel.
+  const [poor, setPoor] = useState<{
+    kind: UpgradeKind;
+    tier: number;
+    price: number;
+  } | null>(null);
   useEffect(() => {
     let active = true;
     void loadPerks(sdk).then((p) => active && setPerks(p));
@@ -149,15 +155,12 @@ export function CrowdGame() {
     if (!next || buying) return;
     setBuying(kind);
     setShopNote("");
+    setPoor(null);
     const result: BuyResult = await buyUpgrade(sdk, next.id);
     setBuying(null);
     if (result === "bought") setPerks(await loadPerks(sdk));
     else if (result === "poor")
-      setShopNote(
-        tRef.current(
-          `You need ${next.price} dingn coins. Earn them with badges for clearing levels.`,
-        ),
-      );
+      setPoor({ kind, tier: next.tier, price: next.price });
     else if (result === "failed")
       setShopNote(tRef.current("The upgrade shop is unavailable right now."));
   }
@@ -814,7 +817,7 @@ export function CrowdGame() {
                       {next ? (
                         <button
                           type="button"
-                          className="crowd-shop-buy"
+                          className={`crowd-shop-buy${poor?.kind === kind ? " poor" : ""}`}
                           disabled={!!buying}
                           onClick={() => void buy(kind)}
                           aria-label={t(
@@ -830,6 +833,34 @@ export function CrowdGame() {
                     </div>
                   );
                 })}
+                {poor && (
+                  <div className="crowd-shop-poor" role="alert">
+                    <span className="crowd-shop-poor-icon" aria-hidden>
+                      <span className="crowd-coin" />
+                    </span>
+                    <span className="crowd-shop-poor-text">
+                      <strong>{t("Not enough coins")}</strong>
+                      <span>
+                        {t(
+                          `${poor.kind === "power" ? t("Power") : t("Fire rate")} +${poor.tier} costs ${poor.price} coins.`,
+                        )}
+                      </span>
+                      <span>
+                        {t(
+                          "Earn more by clearing levels for badges, or by taking out enemies even when a level fails.",
+                        )}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="crowd-shop-poor-close"
+                      onClick={() => setPoor(null)}
+                      aria-label={t("Close")}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
                 {shopNote && <p className="crowd-shop-note">{shopNote}</p>}
               </div>
             )}

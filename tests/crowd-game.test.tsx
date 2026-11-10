@@ -161,7 +161,9 @@ test("a signed-in player buys upgrades with dingn coins on the start screen", as
       screen.getByRole("button", { name: "Buy Fire rate +1 for 50 coins" }),
     ),
   );
-  expect(await screen.findByText(/You need 50 dingn coins/)).toBeTruthy();
+  expect(await screen.findByRole("alert")).toBeTruthy();
+  expect(screen.getByText("Not enough coins")).toBeTruthy();
+  expect(screen.getByText(/costs 50 coins/)).toBeTruthy();
 });
 
 test("signed-out players see no upgrade shop", async () => {

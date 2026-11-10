@@ -418,3 +418,87 @@
     transform: scale(0.6);
   }
 }
+
+/* "Not enough coins", easy to see on the start screen. */
+.crowd-shop-poor {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 8px 10px 12px;
+  border-radius: 14px;
+  border: 1.5px solid #ff9f6b;
+  background: #3a1f17f0;
+  box-shadow: 0 8px 22px #0006;
+  text-align: left;
+  animation: crowd-poor-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.crowd-shop-poor-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #ff9f6b33;
+}
+.crowd-shop-poor-icon .crowd-coin {
+  width: 18px;
+  height: 18px;
+  filter: grayscale(0.5);
+}
+.crowd-shop-poor-icon::after {
+  content: "!";
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff6b4a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 14px;
+  text-align: center;
+}
+.crowd-shop-poor-text {
+  display: grid;
+  gap: 2px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #ffd9c7;
+}
+.crowd-shop-poor-text strong {
+  font-size: 0.95rem;
+  color: #fff;
+}
+.crowd-shop-poor-close {
+  border: 0;
+  background: none;
+  color: #ffd9c7;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.crowd-shop-buy.poor {
+  background: #ffb39a;
+  animation: crowd-poor-shake 0.4s;
+}
+@keyframes crowd-poor-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+}
+@keyframes crowd-poor-shake {
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
