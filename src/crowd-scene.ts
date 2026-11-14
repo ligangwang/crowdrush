@@ -27,6 +27,7 @@ import {
   type World,
 } from "./crowd-core";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   MODEL_URLS,
   WEAPONS,
@@ -41,6 +42,21 @@ import {
   type Baked,
   type Pose,
 } from "./crowd-models";
+import {
+  HAZE,
+  farHills,
+  SUN_DIR,
+  forest,
+  groundMaterial,
+  picture,
+  shadeTexture,
+  skyDome,
+  skyLight,
+  texture,
+  tileUv,
+  treeHeight,
+  type TreeSpot,
+} from "./crowd-land";
 
 /** Metres per road unit: the road is 2 × ROAD wide. */
 export const ROAD = 3.4;
@@ -404,16 +420,22 @@ class Monsters {
     scene: THREE.Scene,
     private blobs: Blobs,
   ) {
-    const eye = new THREE.SphereGeometry(1, 8, 6);
+    const eye = new THREE.SphereGeometry(1, 12, 8);
     const brow = new THREE.BoxGeometry(1, 1, 1);
-    const whiteM = flat(0xffffff, { roughness: 0.4 });
-    const blackM = flat(0x1b1b1b);
+    const whiteM = flat(0xffffff, { roughness: 0.25, flatShading: false });
+    const blackM = flat(0x1b1b1b, { roughness: 0.2, flatShading: false });
     this.slimes = new Parts(
       scene,
       [
         {
-          geo: new THREE.IcosahedronGeometry(0.42, 1),
-          mat: flat(0x70c43b, { roughness: 0.35 }),
+          // wet, glossy jelly
+          geo: new THREE.IcosahedronGeometry(0.42, 3),
+          mat: flat(0x5fb832, {
+            roughness: 0.16,
+            flatShading: false,
+            emissive: 0x1c4a08,
+            emissiveIntensity: 0.6,
+          }),
         },
         { geo: eye, mat: whiteM, per: 2 },
         { geo: eye, mat: blackM, per: 2 },
@@ -939,6 +961,8 @@ class BlockView {
   private mats: THREE.Material[];
   private geos: THREE.BufferGeometry[] = [];
   private sprite?: THREE.Sprite;
+  /** Width in metres, so the painted front matches the sides' grain. */
+  private span = 1;
   constructor(
     readonly block: Block,
     rewardTex?: THREE.Texture,
@@ -959,14 +983,25 @@ class BlockView {
       : crate
         ? [0xe3963a, 0xf5b85a]
         : [0xa9a39a, 0xc4beb4];
-    const side = flat(tint[0]);
-    const top = flat(tint[1]);
+    // wooden planks for crates (painted for weapon crates), dressed stone
+    // for walls, each from a photograph
+    const surface = (color: number) =>
+      new THREE.MeshStandardMaterial({
+        color,
+        map: texture(
+          up ? "planks-paint.jpg" : crate ? "planks.jpg" : "wall.jpg",
+        ),
+        roughness: crate ? 0.78 : 0.92,
+      });
+    const side = surface(up ? tint[0] : crate ? 0xf2d2a8 : 0xd8d2c8);
+    const top = surface(up ? tint[1] : crate ? 0xffe2b8 : 0xe4ded4);
     const front = new THREE.MeshStandardMaterial({
       map: this.tex,
-      roughness: 0.85,
+      roughness: crate ? 0.78 : 0.92,
     });
     this.mats = [side, side, top, side, front, side];
-    const geo = new THREE.BoxGeometry(W, H, D);
+    const geo = boxUv(new THREE.BoxGeometry(W, H, D), W, H, D, crate ? 1.5 : 2);
+    this.span = W;
     this.geos.push(geo);
     const box = new THREE.Mesh(geo, this.mats);
     box.position.y = H / 2;
@@ -1006,52 +1041,68 @@ class BlockView {
     if (!ctx) return;
     const { width: w, height: h } = this.canvas;
     const crate = b.reward > 0;
+    const wood = !!b.upgrade || crate;
+    // the photograph under everything, at the same scale as the sides; it
+    // is painted in again once it has loaded
+    const file = b.upgrade
+      ? "planks-paint.jpg"
+      : wood
+        ? "planks.jpg"
+        : "wall.jpg";
+    const img = picture(file, () => {
+      this.hp = -1;
+    });
+    const grain = (tint: string) => {
+      ctx.fillStyle = tint;
+      ctx.fillRect(0, 0, w, h);
+      if (!img) return;
+      const pattern = ctx.createPattern(img, "repeat");
+      if (!pattern) return;
+      const k = ((w / this.span) * (wood ? 1.5 : 2)) / img.width;
+      pattern.setTransform(new DOMMatrix([k, 0, 0, k, 0, 0]));
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = "source-over";
+    };
     if (b.upgrade) {
       const power = b.upgrade === "power";
-      ctx.fillStyle = power ? "#d8352f" : "#1b9ad6";
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = power ? "#7c1612" : "#0c4f74";
+      grain(power ? "#d8352f" : "#1b9ad6");
+      // a dark painted frame and a stencilled word
+      ctx.strokeStyle = power ? "#5c120e" : "#0a3c5a";
       ctx.lineWidth = 14;
       ctx.strokeRect(7, 7, w - 14, h - 14);
-      ctx.fillStyle = power ? "#ffcf4a" : "#bff1ff";
+      ctx.fillStyle = power ? "#ffd34a" : "#d8f6ff";
       ctx.font = `900 ${Math.round(h * 0.26)}px system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.fillText(this.title, w / 2, h * 0.08, w - 28);
     } else if (crate) {
-      ctx.fillStyle = "#f0a541";
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = "#d98a2a";
-      for (let y = 0; y < h; y += h / 4) ctx.fillRect(0, y + h / 4 - 4, w, 4);
-      ctx.strokeStyle = "#9c5d1a";
-      ctx.lineWidth = 14;
-      ctx.strokeRect(7, 7, w - 14, h - 14);
+      grain("#ffe0b0");
+      // a darker frame of boards and a cross brace, nailed on
+      ctx.strokeStyle = "rgba(70, 38, 10, 0.55)";
+      ctx.lineWidth = 16;
+      ctx.strokeRect(8, 8, w - 16, h - 16);
       ctx.beginPath();
-      ctx.moveTo(14, 14);
-      ctx.lineTo(w - 14, h - 14);
-      ctx.moveTo(w - 14, 14);
-      ctx.lineTo(14, h - 14);
-      ctx.lineWidth = 12;
+      ctx.moveTo(16, 16);
+      ctx.lineTo(w - 16, h - 16);
+      ctx.moveTo(w - 16, 16);
+      ctx.lineTo(16, h - 16);
+      ctx.lineWidth = 13;
       ctx.stroke();
-    } else {
-      ctx.fillStyle = "#b5ada2";
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = "#857c70";
-      ctx.lineWidth = 4;
-      const rows = 5;
-      for (let r = 0; r < rows; r++) {
-        const y = (r * h) / rows;
+      ctx.fillStyle = "rgba(40, 30, 20, 0.7)";
+      for (const [x, y] of [
+        [16, 16],
+        [w - 16, 16],
+        [16, h - 16],
+        [w - 16, h - 16],
+      ]) {
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-        for (let x = r % 2 ? 32 : 0; x < w; x += 64) {
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x, y + h / rows);
-          ctx.stroke();
-        }
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
       }
+    } else {
+      grain("#ece6dc");
     }
     ctx.font = `900 ${Math.round(Math.min(h * 0.5, 96))}px system-ui, sans-serif`;
     ctx.textAlign = "center";
@@ -1111,11 +1162,12 @@ function coinParts(
   glow.rotateX(-Math.PI / 2);
   const gold = (color: number, emissive: number) =>
     mat(
+      // real gold: mostly mirror, so it shines with the sky's light
       new THREE.MeshStandardMaterial({
         color,
-        emissive,
-        metalness: 0.6,
-        roughness: 0.28,
+        emissive: _c.set(emissive).multiplyScalar(0.8).getHex(),
+        metalness: 0.85,
+        roughness: 0.3,
       }),
     );
   return {
@@ -1203,6 +1255,48 @@ class CoinPackView {
   }
 }
 
+/** Box UVs in metres: the texture repeats every `size` on every face. */
+function boxUv(
+  geo: THREE.BoxGeometry,
+  W: number,
+  H: number,
+  D: number,
+  size: number,
+) {
+  const uv = geo.getAttribute("uv") as THREE.BufferAttribute;
+  // faces in order +x, -x, +y, -y, +z, -z, four corners each
+  const spans = [
+    [D, H],
+    [D, H],
+    [W, D],
+    [W, D],
+    [W, H],
+    [W, H],
+  ];
+  for (let i = 0; i < uv.count; i++) {
+    const [u, v] = spans[Math.floor(i / 4)];
+    uv.setXY(i, (uv.getX(i) * u) / size, (uv.getY(i) * v) / size);
+  }
+  return geo;
+}
+
+/** A boulder: a lumpy ball, squashed flat when it is placed. */
+function rockGeometry() {
+  const geo = mergeVertices(new THREE.IcosahedronGeometry(0.5, 2));
+  const pos = geo.getAttribute("position");
+  for (let i = 0; i < pos.count; i++) {
+    _v.fromBufferAttribute(pos, i);
+    const n =
+      1 +
+      0.18 * Math.sin(_v.x * 7.1 + _v.y * 3.3) +
+      0.12 * Math.sin(_v.z * 9.7 - _v.x * 4.1);
+    _v.multiplyScalar(n);
+    pos.setXYZ(i, _v.x, _v.y, _v.z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /** A steady pseudo-random number in [0, 1) for a given input. */
 const hash = (v: number) => {
   const s = Math.sin(v) * 43758.5453;
@@ -1234,6 +1328,8 @@ export class CrowdScene {
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(50, 1, 0.1, 400);
   private sun: THREE.DirectionalLight;
+  private sky: THREE.Mesh;
+  private hills: THREE.Mesh;
   private runners: Runners;
   private blobs: Blobs;
   private monsters: Monsters;
@@ -1245,7 +1341,12 @@ export class CrowdScene {
   private blocks = new Map<number, BlockView>();
   private levelGeos: THREE.BufferGeometry[] = [];
   private levelMats: THREE.Material[] = [];
-  private gateFrame = flat(0xf4f6fb);
+  /** Brushed steel, which picks up the sky once it has loaded. */
+  private gateFrame = new THREE.MeshStandardMaterial({
+    color: 0xdfe3ea,
+    metalness: 0.75,
+    roughness: 0.32,
+  });
   private ring: THREE.Mesh;
   /** The level's coin packs; rebuilt with the level. */
   private packs: CoinPackView[] = [];
@@ -1282,12 +1383,27 @@ export class CrowdScene {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    this.scene.background = new THREE.Color(0xc4e5ff);
-    this.scene.fog = new THREE.Fog(0xc4e5ff, 50, VIEW_AHEAD);
+    this.renderer.toneMappingExposure = 1.0;
+    // until the photographed sky arrives, a plain one of the same haze
+    this.scene.background = HAZE.clone();
+    this.scene.fog = new THREE.Fog(HAZE.clone(), 45, VIEW_AHEAD);
 
-    this.scene.add(new THREE.HemisphereLight(0xe6f4ff, 0x6c8f4a, 1.6));
-    const sun = new THREE.DirectionalLight(0xfff3dd, 2.4);
+    const hemi = new THREE.HemisphereLight(0xe6f4ff, 0x6c8f4a, 1.6);
+    this.scene.add(hemi);
+    // the sky photograph: once here it also lights the scene, filling the
+    // shade with its own blue and giving gold and steel something to reflect
+    this.sky = skyDome((mesh) => {
+      if (this.disposed) return;
+      mesh.visible = true;
+      this.scene.background = null;
+      this.scene.environment = skyLight(this.renderer, mesh);
+      this.scene.environmentIntensity = 0.9;
+      hemi.intensity = 0.35;
+    });
+    this.scene.add(this.sky);
+    this.hills = farHills();
+    this.scene.add(this.hills);
+    const sun = new THREE.DirectionalLight(0xfff1dc, 2.9);
     sun.castShadow = true;
     sun.shadow.mapSize.setScalar(lite ? 1024 : 2048);
     const sc = sun.shadow.camera;
@@ -1299,13 +1415,14 @@ export class CrowdScene {
     sc.far = 80;
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.03;
+    sun.shadow.radius = 3;
     this.scene.add(sun, sun.target);
     this.sun = sun;
 
     // grass that follows the camera, so it never runs out
     const grass = new THREE.Mesh(
       new THREE.PlaneGeometry(400, 400),
-      new THREE.MeshStandardMaterial({ color: 0x8fcf6a, roughness: 1 }),
+      groundMaterial(ROAD * 1.13),
     );
     grass.rotation.x = -Math.PI / 2;
     grass.position.y = -0.02;
@@ -1471,28 +1588,46 @@ export class CrowdScene {
     );
     const mat = <M extends THREE.Material>(m: M) => (this.levelMats.push(m), m);
 
+    // asphalt from a photograph, one tile every four metres
     const road = new THREE.Mesh(
-      keep(new THREE.BoxGeometry(ROAD * 2.2, 0.1, L + 40)),
-      mat(new THREE.MeshStandardMaterial({ color: 0x8a8fa3, roughness: 0.95 })),
+      keep(
+        tileUv(
+          new THREE.BoxGeometry(ROAD * 2.2, 0.1, L + 40),
+          ROAD * 2.2,
+          L + 40,
+          4,
+        ),
+      ),
+      mat(
+        new THREE.MeshStandardMaterial({
+          color: 0xd2d4da,
+          map: texture("road.jpg"),
+          normalMap: texture("road-n.jpg", false),
+          normalScale: new THREE.Vector2(0.7, 0.7),
+          roughness: 0.92,
+        }),
+      ),
     );
     road.position.set(0, -0.04, -(L / 2) + 20);
     road.receiveShadow = true;
     this.level.add(road);
 
-    // red and white kerbs along both edges
-    const kerbGeo = keep(new THREE.BoxGeometry(0.3, 0.16, 1.5));
+    // red and white kerbs along both edges, with rounded tops
+    const kerbGeo = keep(new THREE.CapsuleGeometry(0.15, 1.2, 2, 8));
+    kerbGeo.rotateX(Math.PI / 2);
+    kerbGeo.scale(1, 0.55, 1);
     const kerbs = new THREE.InstancedMesh(
       kerbGeo,
-      mat(flat(0xffffff)),
+      mat(new THREE.MeshStandardMaterial({ roughness: 0.55 })),
       Math.ceil((L + 40) / 1.5) * 2,
     );
     let k = 0;
     for (let z = -20; z < L; z += 1.5)
       for (const side of [-1, 1]) {
-        kerbs.setMatrixAt(k, local(side * ROAD * 1.13, 0.04, -z));
+        kerbs.setMatrixAt(k, local(side * ROAD * 1.13, 0.02, -z));
         kerbs.setColorAt(
           k,
-          _c.set(Math.round(z / 1.5) % 2 ? 0xff5d5d : 0xffffff),
+          _c.set(Math.round(z / 1.5) % 2 ? 0xd8302c : 0xf2f2ee),
         );
         k++;
       }
@@ -1500,90 +1635,179 @@ export class CrowdScene {
     kerbs.receiveShadow = true;
     this.level.add(kerbs);
 
-    // lane dashes
-    const dashGeo = keep(new THREE.BoxGeometry(0.1, 0.02, 2.6));
+    // painted lane dashes, a little worn, lit like the road
+    const dashGeo = keep(new THREE.PlaneGeometry(0.1, 2.6));
+    dashGeo.rotateX(-Math.PI / 2);
     const dashes = new THREE.InstancedMesh(
       dashGeo,
-      mat(new THREE.MeshBasicMaterial({ color: 0xe9ecf3 })),
+      mat(
+        new THREE.MeshStandardMaterial({
+          color: 0xeceae2,
+          roughness: 0.7,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+        }),
+      ),
       Math.ceil(L / 6) * 2 + 4,
     );
     k = 0;
     for (let z = 0; z < L - 10; z += 6)
       for (const lx of [-0.36, 0.36])
-        dashes.setMatrixAt(k++, local(lx * ROAD, 0.02, -z - 1.3));
+        dashes.setMatrixAt(k++, local(lx * ROAD, 0.012, -z - 1.3));
     dashes.count = k;
+    dashes.receiveShadow = true;
     this.level.add(dashes);
 
-    // scenery: low-poly trees, bushes and rocks on the verges
+    // scenery: real trees, with soft shade under each, and rocks
     const r = rng(w.level * 31 + 7);
-    const trunk = keep(new THREE.CylinderGeometry(0.12, 0.18, 0.9, 5));
-    trunk.translate(0, 0.45, 0);
-    const crown = keep(new THREE.ConeGeometry(0.9, 2.1, 6));
-    crown.translate(0, 1.85, 0);
-    const round = keep(new THREE.IcosahedronGeometry(0.85, 0));
-    round.translate(0, 1.6, 0);
-    const rock = keep(new THREE.DodecahedronGeometry(0.5, 0));
-    const maxTrees = Math.ceil((L + 40) / 3.2) * 2;
-    const trunks = new THREE.InstancedMesh(
-      trunk,
-      mat(flat(0x8a5a35)),
-      maxTrees,
+    const spots: TreeSpot[] = [];
+    const rock = keep(rockGeometry());
+    const maxRocks = Math.ceil((L + 40) / 3.2) * 2;
+    const rocks = new THREE.InstancedMesh(
+      rock,
+      mat(
+        new THREE.MeshStandardMaterial({
+          map: texture("rock.jpg"),
+          color: 0xc9c2b6,
+          roughness: 0.9,
+        }),
+      ),
+      maxRocks,
     );
-    const pines = new THREE.InstancedMesh(crown, mat(flat(0x3f9b4f)), maxTrees);
-    const oaks = new THREE.InstancedMesh(round, mat(flat(0x5bb45a)), maxTrees);
-    const rocks = new THREE.InstancedMesh(rock, mat(flat(0xb8b2a8)), maxTrees);
-    let t = 0;
-    let pi = 0;
-    let oi = 0;
     let ri = 0;
     for (let z = -20; z < L + 20; z += 3.2)
       for (const side of [-1, 1]) {
-        const X = side * (ROAD * 1.13 + 1.6 + r() * 9);
+        const X = side * (ROAD * 1.13 + 3.2 + r() * 9);
         const Z = -(z + r() * 3);
         const s = 0.75 + r() * 0.7;
         const roll = r();
         if (roll < 0.15) {
           rocks.setMatrixAt(
             ri++,
-            local(X, 0.15, Z, r(), r() * 3, 0, s, s * 0.7, s),
+            local(X, 0.1, Z, r(), r() * 3, 0, s, s * 0.6, s),
           );
           continue;
         }
-        trunks.setMatrixAt(t++, local(X, 0, Z, 0, 0, 0, s, s, s));
-        if (roll < 0.6)
-          pines.setMatrixAt(
-            pi++,
-            local(X, 0, Z, 0, r() * 3, 0, s, s * (0.9 + r() * 0.4), s),
-          );
-        else oaks.setMatrixAt(oi++, local(X, 0, Z, 0, r() * 3, 0, s, s, s));
+        // firs where the old pines stood, broadleaf trees elsewhere
+        spots.push({ x: X, z: Z, s, kind: roll < 0.5 ? 1 : 0 });
       }
-    for (const [m, n] of [
-      [trunks, t],
-      [pines, pi],
-      [oaks, oi],
-      [rocks, ri],
-    ] as const) {
-      m.count = n;
-      m.castShadow = true;
-      m.frustumCulled = false;
+    // looser woods further out, so the country has depth
+    for (const [from, span, step] of [
+      [12, 16, 3.5],
+      [28, 40, 2.5],
+    ])
+      for (let z = -20; z < L + 60; z += step)
+        for (const side of [-1, 1]) {
+          const X = side * (ROAD * 1.13 + from + r() * span);
+          spots.push({
+            x: X,
+            z: -(z + r() * step),
+            s: 0.8 + r() * 0.6,
+            kind: r() < 0.55 ? 1 : 0,
+          });
+        }
+    rocks.count = ri;
+    rocks.castShadow = true;
+    rocks.receiveShadow = true;
+    rocks.frustumCulled = false;
+    this.level.add(rocks);
+    for (const m of forest(spots, hash)) {
+      keep(m.geometry);
       this.level.add(m);
     }
+    // the shade each crown throws, offset away from the sun
+    const shadeGeo = keep(new THREE.PlaneGeometry(2, 2));
+    shadeGeo.rotateX(-Math.PI / 2);
+    const shades = new THREE.InstancedMesh(
+      shadeGeo,
+      mat(
+        new THREE.MeshBasicMaterial({
+          map: shadeTexture(),
+          color: 0x0a1408,
+          transparent: true,
+          opacity: 0.38,
+          depthWrite: false,
+        }),
+      ),
+      spots.length,
+    );
+    for (const [i, t] of spots.entries()) {
+      const h = treeHeight(t.kind) * t.s;
+      const rx = (t.kind ? 0.32 : 0.5) * h;
+      shades.setMatrixAt(
+        i,
+        local(
+          t.x - SUN_DIR.x * h * 0.45,
+          0.015,
+          t.z - SUN_DIR.z * h * 0.45,
+          0,
+          0,
+          0,
+          rx,
+          1,
+          rx * 1.4,
+        ),
+      );
+    }
+    shades.count = spots.length;
+    shades.frustumCulled = false;
+    shades.renderOrder = 1;
+    this.level.add(shades);
 
-    // the arena where the boss waits
+    // the arena where the boss waits: a round cobbled square
+    const arenaR = ROAD * 1.6;
     const arena = new THREE.Mesh(
-      keep(new THREE.CircleGeometry(ROAD * 1.6, 7)),
-      mat(new THREE.MeshStandardMaterial({ color: 0xb9a2ff, roughness: 0.9 })),
+      keep(
+        tileUv(
+          new THREE.CircleGeometry(arenaR, 48),
+          arenaR * 2,
+          arenaR * 2,
+          2.2,
+        ),
+      ),
+      mat(
+        new THREE.MeshStandardMaterial({
+          map: texture("cobble.jpg"),
+          normalMap: texture("cobble-n.jpg", false),
+          color: 0xe8e2d8,
+          roughness: 0.85,
+        }),
+      ),
     );
     arena.rotation.x = -Math.PI / 2;
     arena.position.set(0, 0.02, -w.boss.z);
     arena.receiveShadow = true;
     this.level.add(arena);
+    // a ring of dressed stone round its edge
+    const kerbRing = new THREE.Mesh(
+      keep(new THREE.TorusGeometry(arenaR, 0.16, 6, 48)),
+      mat(
+        new THREE.MeshStandardMaterial({
+          map: texture("wall.jpg"),
+          color: 0xd8d2c8,
+          roughness: 0.9,
+        }),
+      ),
+    );
+    kerbRing.rotation.x = -Math.PI / 2;
+    kerbRing.scale.z = 0.5;
+    kerbRing.position.set(0, 0.03, -w.boss.z);
+    kerbRing.receiveShadow = true;
+    this.level.add(kerbRing);
     const line = new THREE.Mesh(
       keep(new THREE.PlaneGeometry(ROAD * 2.2, 0.8)),
-      mat(new THREE.MeshBasicMaterial({ map: checker(), transparent: false })),
+      mat(
+        new THREE.MeshStandardMaterial({
+          map: checker(),
+          roughness: 0.7,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+        }),
+      ),
     );
     line.rotation.x = -Math.PI / 2;
-    line.position.set(0, 0.025, -(w.boss.z - BOSS_STOP - 1));
+    line.position.set(0, 0.02, -(w.boss.z - BOSS_STOP - 1));
+    line.receiveShadow = true;
     this.level.add(line);
 
     // coin packs: a pile of gold coins under a big spinning coin
@@ -1643,8 +1867,9 @@ export class CrowdScene {
     this.blocks.clear();
     for (const g of this.levelGeos) g.dispose();
     for (const m of this.levelMats) {
+      // photographs are shared by every level, so they stay loaded
       const map = (m as THREE.MeshBasicMaterial).map;
-      map?.dispose();
+      if (map && !map.userData.shared) map.dispose();
       m.dispose();
     }
     this.levelGeos = [];
@@ -1831,6 +2056,8 @@ export class CrowdScene {
     this.sun.target.position.set(this.camX, 0, -w.z - 8);
     const grass = this.scene.getObjectByName("grass");
     if (grass) grass.position.z = -w.z - 60;
+    this.sky.position.copy(this.camera.position);
+    this.hills.position.set(this.camera.position.x, 0, this.camera.position.z);
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -1855,6 +2082,7 @@ export class CrowdScene {
         (Array.isArray(m) ? m : [m]).forEach((x) => x.dispose());
       }
     });
+    this.scene.environment?.dispose();
     this.renderer.dispose();
   }
 }
