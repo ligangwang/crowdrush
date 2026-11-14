@@ -155,6 +155,10 @@ export class Sfx {
           ),
         );
         break;
+      case "coin":
+        this.tone(1568, 1568, 0.06, "square", 0.08);
+        this.tone(2093, 2093, 0.18, "square", 0.08, 0.06);
+        break;
       case "crate":
         this.tone(988, 988, 0.08, "square", 0.1);
         this.tone(1319, 1319, 0.25, "square", 0.1, 0.08);

@@ -52,6 +52,33 @@
   align-items: center;
   flex-wrap: wrap;
 }
+.crowd-hud-coins {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #2a2208;
+  background: #ffe08add;
+  border-radius: 999px;
+  padding: 5px 10px 5px 6px;
+}
+.crowd-hud-coins[data-bump="0"] {
+  animation: crowd-bump-a 0.3s ease-out;
+}
+.crowd-hud-coins[data-bump="1"] {
+  animation: crowd-bump-b 0.3s ease-out;
+}
+@keyframes crowd-bump-a {
+  50% {
+    transform: scale(1.25);
+  }
+}
+@keyframes crowd-bump-b {
+  50% {
+    transform: scale(1.25);
+  }
+}
 .crowd-weapon {
   display: inline-flex;
   gap: 4px;
@@ -174,6 +201,33 @@
 }
 .crowd3d-count.rival {
   background: #8a1820e6;
+}
+/* A coin pack's number: shots left to break it open. */
+.crowd3d-count.coin {
+  font-size: 15px;
+  color: #3a2a00;
+  background: #ffd84ae6;
+  border-color: #fff6c8;
+}
+.crowd3d-flies {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 3;
+}
+.crowd-fly-coin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff6c0, #ffc93a 45%, #c98a12);
+  box-shadow:
+    0 0 0 2px #a8700a inset,
+    0 2px 6px #0005;
 }
 .crowd3d-float {
   font-size: 22px;

@@ -75,3 +75,25 @@ export function createBadgeTracker() {
     },
   };
 }
+
+/** The most coins dingn pays for one rewards.earn call. */
+export const MAX_EARN = 10;
+
+/**
+ * Pays `coins` through rewards.earn, in calls of at most MAX_EARN, stopping
+ * once dingn's daily limit pays less than asked. Resolves to the coins paid.
+ */
+export async function earnCoins(
+  rewards: Pick<DingnGame["rewards"], "earn">,
+  coins: number,
+) {
+  let paid = 0;
+  for (let left = coins; left > 0; ) {
+    const ask = Math.min(MAX_EARN, left);
+    const got = (await rewards.earn(ask)).coins;
+    paid += got;
+    left -= ask;
+    if (got < ask) break;
+  }
+  return paid;
+}
