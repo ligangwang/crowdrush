@@ -16,6 +16,9 @@ import {
   RATE_PERK,
   defeated,
   levelCoins,
+  firepower,
+  crowdRadius,
+  volley,
   packSize,
   newLevel,
   progress,
@@ -360,8 +363,10 @@ export function CrowdGame() {
       w.events.length = 0;
     }
     if (w.shotsFired !== f.shots) {
+      const fired = w.shotsFired - f.shots;
       f.shots = w.shotsFired;
       sfx.current?.play({ type: "shot" });
+      muzzle(w, Math.min(fired, 4));
     }
     if (was !== w.phase) {
       setPhase(w.phase);
@@ -412,6 +417,31 @@ export function CrowdGame() {
     f.shake = Math.max(0, f.shake - dt * 2.5);
     f.bossHit = Math.max(0, f.bossHit - dt * 6);
     f.slamAnim = Math.max(0, f.slamAnim - dt * 2.2);
+  }
+
+  /**
+   * Muzzle flashes across the front of the squad: a bigger squad shows more
+   * and bigger ones, and past a few hundred soldiers the ground trembles.
+   */
+  function muzzle(w: World, shots: number) {
+    const f = fx.current;
+    const power = firepower(w.count);
+    const r = crowdRadius(w.count);
+    const n = shots * Math.max(1, Math.round(volley(w.count) / 2));
+    for (let i = 0; i < n; i++)
+      f.sparks.push({
+        x: w.x + (Math.random() * 2 - 1) * r * 0.9,
+        z: w.z + 0.5 + Math.random() * 0.4,
+        h: 0.45 + Math.random() * 0.15,
+        vx: (Math.random() - 0.5) * 0.05,
+        vz: 2 + Math.random() * 3,
+        vh: 0.5,
+        life: 0,
+        max: 0.06 + Math.random() * 0.06,
+        color: Math.random() < 0.5 ? "#fff6c8" : "#ffd25a",
+        size: 0.07 + power * 0.1 + Math.random() * 0.04,
+      });
+    if (power > 0.7) f.shake = Math.max(f.shake, (power - 0.7) * 0.25);
   }
 
   function burst(
@@ -475,10 +505,19 @@ export function CrowdGame() {
       case "hit":
         if (e.target === "boss") {
           f.bossHit = 1;
-          if (Math.random() < 0.3)
-            burst(e.x, e.z - 1.2, 2.5 + Math.random() * 3, "#ffd36a", 2, 2);
+          const heavy = firepower(w.count);
+          if (Math.random() < 0.3 + heavy * 0.5)
+            burst(
+              e.x,
+              e.z - 1.2,
+              2.5 + Math.random() * 3,
+              "#ffd36a",
+              2 + Math.round(heavy * 4),
+              2 + heavy * 2,
+            );
           if (Math.random() < 0.08) sfx.current?.play(e);
         } else {
+          const heavy = firepower(w.count);
           const c =
             e.target === "squad"
               ? RIVAL
@@ -487,7 +526,7 @@ export function CrowdGame() {
                 : e.target === "coin"
                   ? "#ffe680"
                   : "#ffd36a";
-          burst(e.x, e.z, 0.6, c, 2, 1.5);
+          burst(e.x, e.z, 0.6, c, 2 + Math.round(heavy * 5), 1.5 + heavy * 1.5);
           sfx.current?.play(e);
         }
         break;

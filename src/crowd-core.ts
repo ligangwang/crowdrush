@@ -93,7 +93,14 @@ export type Boss = {
   summonEvery: number;
   minions: number;
 };
-export type Bullet = { x: number; z: number; dmg: number; dead: boolean };
+export type Bullet = {
+  x: number;
+  z: number;
+  dmg: number;
+  dead: boolean;
+  /** Which shot this is (w.shotsFired when fired), to draw it steadily. */
+  n?: number;
+};
 export type Phase = "ready" | "run" | "boss" | "won" | "lost";
 export type GameEvent =
   | {
@@ -211,8 +218,24 @@ export function squadRadius(count: number) {
  * harder.
  */
 export function fireRate(count: number) {
-  return Math.min(20, 4.5 + Math.sqrt(count) * 1.2);
+  return Math.min(MAX_FIRE_RATE, 4.5 + Math.sqrt(count) * 1.2);
 }
+export const MAX_FIRE_RATE = 20;
+/** The squad size where the fire rate stops growing (about 167). */
+export const FULL_RATE_COUNT = ((MAX_FIRE_RATE - 4.5) / 1.2) ** 2;
+/**
+ * Past the fire-rate cap a bigger squad hits harder instead: each round's
+ * damage keeps growing with the square root of the squad, as the fire rate
+ * did below the cap (about 1.7x at 500 soldiers, 2.4x at 999).
+ */
+export const heavyRounds = (count: number) =>
+  Math.max(1, Math.sqrt(count / FULL_RATE_COUNT));
+/**
+ * Damage a second from a squad's base weapon: fire rate times heavy rounds.
+ * Levels are sized with it, so a level expecting a big squad stays as hard
+ * as before while a squad that outgrows the level hits harder.
+ */
+export const squadDps = (count: number) => fireRate(count) * heavyRounds(count);
 export const MAX_POWER = 4;
 /**
  * Permanent upgrades bought with dingn coins (crowd-upgrades.ts), up to 3
@@ -237,6 +260,21 @@ export function applyPerks(w: World, perks: Perks) {
 export const RATE_PERK = 0.1;
 export const CRIT_PERK = 0.15;
 export const MAX_RAPID = 4;
+/**
+ * How a squad's gunfire looks, from 0 (one soldier) to 1 (a thousand). The
+ * rules cap the rate of fire well below one shot per soldier, so a big squad
+ * is drawn firing volleys: each shot shows as several tracers spread across
+ * the squad, with bigger flashes and impacts.
+ */
+export const firepower = (count: number) =>
+  Math.min(1, Math.log10(Math.max(1, count)) / 3);
+/**
+ * Tracers drawn for each shot: 1 for one soldier, rising all the way to 10
+ * at a thousand (about 4 at 10, 6 at 50, 8 at 165, 9 at 500).
+ */
+export const volley = (count: number) =>
+  Math.max(1, Math.min(10, Math.round(1 + 9 * firepower(count))));
+
 /** Shots per second for this squad, including rate upgrades. */
 export function shotRate(
   w: Pick<World, "count" | "rapid"> & { perks?: Perks },
@@ -358,7 +396,7 @@ export function newLevel(level: number): World {
       expected = applyOp(expected, good);
       // after each gate, a weapon crate on one side lane: rate, power, ...
       if (i > 0 && ups < 2 + Math.min(3, Math.floor(lv / 3))) {
-        const hp = Math.round(fireRate(expected) * 0.7) + Math.floor(lv / 6);
+        const hp = Math.round(squadDps(expected) * 0.7) + Math.floor(lv / 6);
         things.push({
           kind: "block",
           id: id++,
@@ -456,7 +494,7 @@ export function newLevel(level: number): World {
     const near = [...checkpoints].reverse().find((c) => c.z <= mz);
     const size = Math.max(1, near?.expected ?? START_COUNT);
     const g = near?.gun ?? 1;
-    const dps = fireRate(size) * g;
+    const dps = squadDps(size) * g;
     // the gap that keeps this group's hit points within the pressure budget
     const gap = (hp: number, closing: number) =>
       Math.max(1.8, (hp * closing) / (pressure * dps)) * (0.8 + roll() * 0.4);
@@ -573,7 +611,7 @@ export function newLevel(level: number): World {
 
   // seconds of full fire the boss soaks up, assuming every weapon crate
   const bossHp = Math.round(
-    fireRate(expected) * gun ** 0.9 * (5 + 2 * Math.sqrt(hard)) * soften,
+    squadDps(expected) * gun ** 0.9 * (5 + 2 * Math.sqrt(hard)) * soften,
   );
   return {
     level: lv,
@@ -661,7 +699,7 @@ function placeCoins(
       Math.floor(roll() * (MAX_PACK_COINS - MIN_PACK_COINS + 1));
     const near = [...checkpoints].reverse().find((c) => c.z <= z);
     const dps =
-      fireRate(Math.max(START_COUNT, near?.expected ?? START_COUNT)) *
+      squadDps(Math.max(START_COUNT, near?.expected ?? START_COUNT)) *
       Math.sqrt(near?.gun ?? 1);
     const hp = Math.max(value, Math.round(dps * (0.5 + value * 0.09) * soften));
     coins.push({
@@ -721,6 +759,12 @@ function lose(w: World) {
   w.phase = "lost";
   w.bullets = [];
   w.events.push({ type: "lost" });
+}
+
+/** Whole damage, rounding a fraction up as often as it is large. */
+function roundDamage(w: World, dmg: number) {
+  const whole = Math.floor(dmg);
+  return dmg === whole ? whole : whole + (w.random() < dmg - whole ? 1 : 0);
 }
 
 /** Advances the world by dt seconds. Events since the last call are in w.events. */
@@ -789,11 +833,14 @@ export function step(w: World, dt: number) {
       x: w.x + (w.random() * 2 - 1) * r * 0.7,
       z: w.z + 0.8,
       // an upgraded weapon sometimes lands a critical hit
-      dmg:
-        w.perks.power > 0 && w.random() < CRIT_PERK * w.perks.power
+      dmg: roundDamage(
+        w,
+        (w.perks.power > 0 && w.random() < CRIT_PERK * w.perks.power
           ? w.power * 2
-          : w.power,
+          : w.power) * heavyRounds(w.count),
+      ),
       dead: false,
+      n: w.shotsFired,
     });
   }
   for (const b of w.bullets) {
