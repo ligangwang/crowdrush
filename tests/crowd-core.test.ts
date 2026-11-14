@@ -9,6 +9,9 @@ import {
   lossCoins,
   winCoins,
   levelCoins,
+  firepower,
+  volley,
+  MAX_COUNT,
   MAX_COIN_PACKS,
   MIN_COIN_PACKS,
   MAX_PACK_COINS,
@@ -504,4 +507,14 @@ test("shooting a coin pack down to zero collects its coins", () => {
   // a loss pays the coins collected on top of its share
   w.phase = "lost";
   assert.equal(levelCoins(w), lossCoins(w) + c.value);
+});
+
+test("a bigger squad's gunfire is drawn heavier, on a curve", () => {
+  assert.equal(volley(1), 1);
+  assert.equal(firepower(1), 0);
+  assert.ok(volley(50) > volley(5) && volley(5) > volley(1));
+  assert.equal(volley(1000), 10);
+  assert.equal(volley(MAX_COUNT), 10);
+  assert.ok(Math.abs(firepower(1000) - 1) < 1e-9);
+  assert.ok(firepower(100) > firepower(10));
 });

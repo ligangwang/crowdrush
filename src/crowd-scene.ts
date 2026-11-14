@@ -18,6 +18,8 @@ import {
   squadRadius,
   type Block,
   packSize,
+  firepower,
+  volley,
   type Coin,
   type Gate,
   type Monster,
@@ -1201,6 +1203,12 @@ class CoinPackView {
   }
 }
 
+/** A steady pseudo-random number in [0, 1) for a given input. */
+const hash = (v: number) => {
+  const s = Math.sin(v) * 43758.5453;
+  return s - Math.floor(s);
+};
+
 function labelTexture(text: string, color: string) {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
@@ -1312,8 +1320,9 @@ export class CrowdScene {
 
     this.bullets = new THREE.InstancedMesh(
       new THREE.CapsuleGeometry(0.05, 0.5, 1, 4),
-      new THREE.MeshBasicMaterial({ color: 0xffe26a }),
-      500,
+      // tracers glow: they skip tone mapping so they stay hot and saturated
+      new THREE.MeshBasicMaterial({ color: 0xffe26a, toneMapped: false }),
+      lite ? 900 : 1600,
     );
     this.bullets.frustumCulled = false;
     this.bullets.count = 0;
@@ -1737,14 +1746,41 @@ export class CrowdScene {
     (this.bullets.material as THREE.MeshBasicMaterial).color.setHex(
       BULLET_COLORS[tier],
     );
-    const fat = 1 + tier * 0.45;
+    // a big squad fires volleys: each shot is drawn as several tracers
+    // spread across the squad, thicker and longer the bigger it is
+    const power = firepower(w.count);
+    const fat = (1 + tier * 0.45) * (1 + power * 0.9);
+    const long = 1 + power * 0.8;
+    const tracers = this.lite
+      ? Math.max(1, Math.ceil(volley(w.count) * 0.6))
+      : volley(w.count);
+    const spread = crowdRadius(w.count) * ROAD * 0.95;
+    const cap = this.bullets.instanceMatrix.count;
     let n = 0;
     for (const b of w.bullets) {
-      if (n >= this.bullets.instanceMatrix.count) break;
-      this.bullets.setMatrixAt(
-        n++,
-        local(b.x * ROAD, 0.5, -b.z - 0.3, Math.PI / 2, 0, 0, fat, 1, fat),
-      );
+      const seed = b.n ?? 0;
+      for (let k = 0; k < tracers && n < cap; k++) {
+        // a steady pseudo-random spot for each tracer of this shot
+        const h1 = hash(seed * 12.9898 + k * 78.233);
+        const h2 = hash(seed * 39.3468 + k * 11.135);
+        const dx = k ? (h1 * 2 - 1) * spread : 0;
+        const dz = k ? h2 * 4.5 : 0;
+        this.bullets.setMatrixAt(
+          n++,
+          local(
+            b.x * ROAD + dx,
+            0.45 + (k ? h2 * 0.15 : 0.05),
+            -b.z - 0.3 - dz,
+            Math.PI / 2,
+            0,
+            0,
+            fat,
+            long,
+            fat,
+          ),
+        );
+      }
+      if (n >= cap) break;
     }
     this.bullets.count = n;
     this.bullets.instanceMatrix.needsUpdate = true;

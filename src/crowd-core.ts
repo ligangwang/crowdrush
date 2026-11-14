@@ -93,7 +93,14 @@ export type Boss = {
   summonEvery: number;
   minions: number;
 };
-export type Bullet = { x: number; z: number; dmg: number; dead: boolean };
+export type Bullet = {
+  x: number;
+  z: number;
+  dmg: number;
+  dead: boolean;
+  /** Which shot this is (w.shotsFired when fired), to draw it steadily. */
+  n?: number;
+};
 export type Phase = "ready" | "run" | "boss" | "won" | "lost";
 export type GameEvent =
   | {
@@ -237,6 +244,18 @@ export function applyPerks(w: World, perks: Perks) {
 export const RATE_PERK = 0.1;
 export const CRIT_PERK = 0.15;
 export const MAX_RAPID = 4;
+/**
+ * How a squad's gunfire looks, from 0 (one soldier) to 1 (a thousand). The
+ * rules cap the rate of fire well below one shot per soldier, so a big squad
+ * is drawn firing volleys: each shot shows as several tracers spread across
+ * the squad, with bigger flashes and impacts.
+ */
+export const firepower = (count: number) =>
+  Math.min(1, Math.log10(Math.max(1, count)) / 3);
+/** Tracers drawn for each shot: 1 for one soldier, up to 10 for a big squad. */
+export const volley = (count: number) =>
+  Math.max(1, Math.min(10, Math.round(1 + Math.log2(Math.max(1, count)))));
+
 /** Shots per second for this squad, including rate upgrades. */
 export function shotRate(
   w: Pick<World, "count" | "rapid"> & { perks?: Perks },
@@ -794,6 +813,7 @@ export function step(w: World, dt: number) {
           ? w.power * 2
           : w.power,
       dead: false,
+      n: w.shotsFired,
     });
   }
   for (const b of w.bullets) {
