@@ -49,6 +49,7 @@ import {
   forest,
   groundMaterial,
   picture,
+  preloadLand,
   shadeTexture,
   skyDome,
   skyLight,
@@ -1332,6 +1333,8 @@ export class CrowdScene {
   private camera = new THREE.PerspectiveCamera(50, 1, 0.1, 400);
   private sun: THREE.DirectionalLight;
   private sky: THREE.Mesh;
+  private skySettled: () => void = () => undefined;
+  private skyReady = new Promise<void>((done) => (this.skySettled = done));
   private hills: THREE.Mesh;
   private runners: Runners;
   private blobs: Blobs;
@@ -1396,7 +1399,8 @@ export class CrowdScene {
     // the sky photograph: once here it also lights the scene, filling the
     // shade with its own blue and giving gold and steel something to reflect
     this.sky = skyDome((mesh) => {
-      if (this.disposed) return;
+      this.skySettled();
+      if (this.disposed || !mesh) return;
       mesh.visible = true;
       this.scene.background = null;
       this.scene.environment = skyLight(this.renderer, mesh);
@@ -1476,16 +1480,20 @@ export class CrowdScene {
    * Loads the Polyfork models and swaps them in. Until they arrive, or if
    * they fail to load, the code-built characters stay on screen.
    */
-  async loadModels() {
+  async loadModels(progress?: (url: string, share: number) => void) {
+    const get = (url: string) =>
+      loadModel(url, (k) => progress?.(url, k)).finally(() =>
+        progress?.(url, 1),
+      );
+    // the guns download alongside the characters
+    const guns = Promise.allSettled(WEAPONS.map((wp) => get(wp.url)));
     const [runner, brute, boss] = await Promise.all([
-      loadModel(MODEL_URLS.runner),
-      loadModel(MODEL_URLS.brute),
-      loadModel(MODEL_URLS.boss),
+      get(MODEL_URLS.runner),
+      get(MODEL_URLS.brute),
+      get(MODEL_URLS.boss),
     ]);
     // a missing gun model just leaves the squad on its last good weapon
-    const weapons = await Promise.allSettled(
-      WEAPONS.map((wp) => loadModel(wp.url)),
-    );
+    const weapons = await guns;
     if (this.disposed) return;
     const phases = Array.from({ length: RUN_FRAMES }, (_, i) => i / RUN_FRAMES);
     const pose: Pose = (b, p) => (p < 0 ? standPose(b, 0) : runPose(b, p));
@@ -1565,6 +1573,54 @@ export class CrowdScene {
     this.modelsReady = true;
   }
   modelsReady = false;
+
+  /**
+   * Downloads everything a level shows: the sky, every photograph and the
+   * models. `onProgress` gets the share done, 0 to 1. Resolves once all of
+   * it is in (or has failed, in which case plain stand-ins are drawn).
+   */
+  async preload(onProgress: (share: number) => void) {
+    // weights roughly by download size: a model is a few pictures' worth
+    const MODEL = 4;
+    const urls = [
+      MODEL_URLS.runner,
+      MODEL_URLS.brute,
+      MODEL_URLS.boss,
+      ...WEAPONS.map((wp) => wp.url),
+    ];
+    const shares = new Map(urls.map((u) => [u, 0]));
+    let files = 0;
+    let sky = 0;
+    let total = 0;
+    const report = () => {
+      if (!total) return;
+      let models = 0;
+      for (const k of shares.values()) models += k * MODEL;
+      onProgress(Math.min(1, (files + sky * 2 + models) / total));
+    };
+    const land = preloadLand(() => {
+      files++;
+      report();
+    });
+    total = land.count + 2 + urls.length * MODEL;
+    report();
+    const skyDone = this.skyReady.then(() => {
+      sky = 1;
+      report();
+    });
+    const models = this.loadModels((url, k) => {
+      shares.set(url, Math.max(shares.get(url) ?? 0, k));
+      report();
+    }).catch((err) => console.warn("Crowd Rush models", err));
+    await Promise.all([land.all, skyDone, models]);
+    if (this.disposed) return;
+    // send every picture to the graphics card now, not mid-run
+    this.scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
+      if (m?.map) this.renderer.initTexture(m.map);
+    });
+    onProgress(1);
+  }
   private disposed = false;
 
   resize(width: number, height: number, dpr: number) {

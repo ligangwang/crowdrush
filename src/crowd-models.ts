@@ -43,8 +43,14 @@ export type Baked = {
   height: number;
 };
 
-export function loadModel(url: string): Promise<GLTF> {
-  return new GLTFLoader().loadAsync(url);
+/** Loads a model; `progress` gets the share of it downloaded so far. */
+export function loadModel(
+  url: string,
+  progress?: (share: number) => void,
+): Promise<GLTF> {
+  return new GLTFLoader().loadAsync(url, (e) => {
+    if (progress && e.total) progress(e.loaded / e.total);
+  });
 }
 
 const TAU = Math.PI * 2;

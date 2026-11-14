@@ -3,9 +3,9 @@
  * lights the scene, turf and gravel on the ground, and real trees.
  *
  * The pictures are CC0 assets from Poly Haven (see public/textures/CREDITS.md),
- * resized small so the game stays light on phones. Every file loads in the
- * background: until it arrives the scene keeps plain colours, so nothing
- * waits on a download.
+ * resized small so the game stays light on phones. The game shows a
+ * loading bar until `preloadLand` has them all, so no level is ever drawn
+ * half-dressed.
  */
 import * as THREE from "three";
 
@@ -27,20 +27,19 @@ export function texture(file: string, color = true, onLoad?: () => void) {
   const hit = cache.get(file);
   if (hit) {
     if (onLoad) {
-      if (hit.image) onLoad();
+      if (hit.userData.settled) onLoad();
       else (hit.userData.waiting ??= [] as (() => void)[]).push(onLoad);
     }
     return hit;
   }
-  const t = loader.load(
-    BASE + file,
-    () => {
-      for (const f of (t.userData.waiting ?? []) as (() => void)[]) f();
-      t.userData.waiting = [];
-    },
-    undefined,
-    () => undefined,
-  );
+  // waiters run once the file is in, or once it has failed (the
+  // material then keeps its plain colour), so loading never hangs
+  const settle = () => {
+    for (const f of (t.userData.waiting ?? []) as (() => void)[]) f();
+    t.userData.waiting = [];
+    t.userData.settled = true;
+  };
+  const t = loader.load(BASE + file, settle, undefined, settle);
   t.userData.waiting = onLoad ? [onLoad] : [];
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 4;
@@ -78,12 +77,63 @@ export function picture(file: string, onLoad: () => void) {
   return null;
 }
 
+/** Every photograph a level uses, as file and whether it holds colour. */
+const FILES: [string, boolean][] = [
+  ["grass.jpg", true],
+  ["grass-n.jpg", false],
+  ["gravel.jpg", true],
+  ["road.jpg", true],
+  ["road-n.jpg", false],
+  ["cobble.jpg", true],
+  ["cobble-n.jpg", false],
+  ["rock.jpg", true],
+  ["wall.jpg", true],
+  ["planks.jpg", true],
+  ["planks-paint.jpg", true],
+  ["tree.webp", true],
+  ["tree-n.webp", false],
+  ["fir.webp", true],
+  ["fir-n.webp", false],
+];
+/** Pictures painted into crate and wall canvases. */
+const PICTURES = ["planks.jpg", "planks-paint.jpg", "wall.jpg"];
+
+/**
+ * Loads every photograph the scenery uses. `step` is called once per file
+ * as it arrives (or fails); resolves when all have settled.
+ */
+export function preloadLand(step: () => void) {
+  const jobs: Promise<void>[] = [];
+  for (const [file, color] of FILES)
+    jobs.push(
+      new Promise((done) =>
+        texture(file, color, () => {
+          step();
+          done();
+        }),
+      ),
+    );
+  for (const file of PICTURES)
+    jobs.push(
+      new Promise((done) => {
+        const finish = () => {
+          step();
+          done();
+        };
+        if (picture(file, finish)) finish();
+        else
+          images.get(file)?.addEventListener("error", finish, { once: true });
+      }),
+    );
+  return { count: jobs.length, all: Promise.all(jobs) };
+}
+
 /**
  * The sky: Poly Haven's Kloofendal photograph, its top half stored with a
  * curve so one small JPG holds its range of brightness. Its foot fades into
  * the same haze as the fog. `onLoad` runs once the picture is here.
  */
-export function skyDome(onLoad: (mesh: THREE.Mesh) => void) {
+export function skyDome(onLoad: (mesh: THREE.Mesh | null) => void) {
   const uniforms = {
     map: { value: null as THREE.Texture | null },
     turn: { value: 0 },
@@ -97,7 +147,7 @@ export function skyDome(onLoad: (mesh: THREE.Mesh) => void) {
       onLoad(mesh);
     },
     undefined,
-    () => undefined,
+    () => onLoad(null),
   );
   map.wrapS = THREE.RepeatWrapping;
   map.minFilter = THREE.LinearFilter;
@@ -180,6 +230,8 @@ export function groundMaterial(edge: number) {
   const done = () => {
     // Plain green until the turf arrives, then the photograph.
     if (++ready < 3) return;
+    // a picture that failed to download keeps the meadow plain green
+    if (!grass.image || !grassN.image || !gravel.image) return;
     material.color.set(0xffffff);
     material.userData.ready = 1;
     if (material.userData.shader)

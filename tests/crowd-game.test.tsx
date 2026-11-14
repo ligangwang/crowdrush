@@ -16,6 +16,12 @@ import { loadStore } from "../src/crowd-shared";
 const mocks = vi.hoisted(() => ({
   webgl: true,
   scene: null as { translate: (text: string) => string } | null,
+  /** Holds the scene's downloads until a test lets them finish. */
+  hold: null as null | {
+    started?: boolean;
+    progress: (k: number) => void;
+    done: () => void;
+  },
 }));
 // A stand-in for the three.js scene, so overlays stay up while a test runs.
 vi.mock("../src/crowd-scene", () => ({
@@ -29,6 +35,18 @@ vi.mock("../src/crowd-scene", () => ({
     load() {}
     relabel() {}
     loadModels = () => Promise.resolve();
+    preload = (progress: (share: number) => void) => {
+      if (!mocks.hold) {
+        progress(1);
+        return Promise.resolve();
+      }
+      const hold = mocks.hold;
+      return new Promise<void>((done) => {
+        hold.progress = progress;
+        hold.done = done;
+        hold.started = true;
+      });
+    };
     render() {}
     project = () => ({ x: 0, y: 0, visible: false });
     dispose() {}
@@ -90,6 +108,7 @@ async function play(saved: Record<string, string> = {}) {
 beforeEach(() => {
   fakeSdk(false);
   mocks.webgl = true;
+  mocks.hold = null;
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 });
 afterEach(() => {
@@ -103,6 +122,20 @@ test("starts at the saved level and names the game for screen readers", async ()
     await screen.findByRole("heading", { name: "Crowd Rush" }),
   ).toBeTruthy();
   expect(screen.getAllByText("Level 4").length).toBeGreaterThan(0);
+});
+
+test("shows a loading bar, not the level, until the scenery is in", async () => {
+  mocks.hold = { progress: () => {}, done: () => {} };
+  await play();
+  const bar = await screen.findByRole("progressbar");
+  await waitFor(() => expect(mocks.hold?.started).toBe(true));
+  expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+  await act(async () => mocks.hold?.progress(0.42));
+  expect(bar.getAttribute("aria-valuenow")).toBe("42");
+  expect(screen.getByText("Loading 42%")).toBeTruthy();
+  await act(async () => mocks.hold?.done());
+  expect(await screen.findByRole("button", { name: "Start" })).toBeTruthy();
+  expect(screen.queryByRole("progressbar")).toBeNull();
 });
 
 test("a returning player gets badges for levels cleared before, at sign-in", async () => {

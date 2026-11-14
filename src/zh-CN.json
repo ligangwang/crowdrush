@@ -1,6 +1,8 @@
 {
   "Back to games": "返回游戏大厅",
   "Loading your game…": "正在加载游戏…",
+  "Loading": "加载中",
+  "Loading {0}%": "加载中 {0}%",
   "{0} of 3 stars": "{0} / 3 颗星",
   "Level": "等级",
   "Try again": "再试一次",

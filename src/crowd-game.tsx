@@ -136,6 +136,11 @@ export function CrowdGame() {
   });
   const [sound, setSound] = useState(true);
   const [noGl, setNoGl] = useState(false);
+  // Share of the scenery and models downloaded, 0 to 1; null once all of
+  // it is in. The level stays behind a loading bar until then.
+  const [loading, setLoading] = useState<number | null>(0);
+  const loadingRef = useRef(true);
+  loadingRef.current = loading !== null;
   const [weapon, setWeapon] = useState({ power: 1, rapid: 0 });
   // dingn coins picked up on the road this level.
   const [picked, setPicked] = useState(0);
@@ -204,6 +209,7 @@ export function CrowdGame() {
 
   function begin() {
     sfx.current?.wake();
+    if (loadingRef.current) return;
     const w = world.current;
     if (w.phase === "ready" && !needsSignIn(w.level, !!uidRef.current)) {
       start(w);
@@ -290,10 +296,20 @@ export function CrowdGame() {
             : undefined;
         observer?.observe(stage);
         scene.load(world.current);
-        // the Polyfork models replace the code-built characters once loaded
+        // a loading bar stays up until the sky, the photographs and the
+        // models are all in; a very slow connection gets the game anyway
+        const cap = setTimeout(() => setLoading(null), 45000);
         scene
-          .loadModels()
-          .catch((err) => console.warn("Crowd Rush models", err));
+          .preload((k) =>
+            setLoading((was) =>
+              was === null ? null : Math.max(was, Math.floor(k * 100) / 100),
+            ),
+          )
+          .catch((err) => console.warn("Crowd Rush loading", err))
+          .finally(() => {
+            clearTimeout(cap);
+            if (!disposed) setLoading(null);
+          });
         let last = performance.now();
         const loop = (now: number) => {
           raf = requestAnimationFrame(loop);
@@ -854,39 +870,63 @@ export function CrowdGame() {
             </button>
           </div>
         )}
-        {!noGl && phase === "ready" && locked && !sessionReady && (
-          <div className="crowd-overlay">
-            <p role="status">{t("Loading your game…")}</p>
-          </div>
-        )}
-        {!noGl && phase === "ready" && locked && sessionReady && (
-          <div className="crowd-overlay crowd-gate">
-            <p className="eyebrow">{t(`Level ${level}`)}</p>
-            <h2>{t("Save your progress to keep going")}</h2>
-            <p>
-              {t(
-                `You've cleared the first ${FREE_LEVELS} levels. Sign in for free to play level ${FREE_LEVELS + 1} and beyond, and pick up where you left off on any device.`,
-              )}
-            </p>
-            <div className="crowd-actions">
-              <button
-                type="button"
-                className="button"
-                onClick={() => sdk.requestSignIn()}
-              >
-                {t("Sign in to keep playing")}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => load(FREE_LEVELS)}
-              >
-                {t(`Replay level ${FREE_LEVELS}`)}
-              </button>
+        {!noGl && loading !== null && (
+          <div className="crowd-loading">
+            <p className="crowd-loading-title">{t("Crowd Rush")}</p>
+            <div
+              className="crowd-loading-bar"
+              role="progressbar"
+              aria-label={t("Loading")}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(loading * 100)}
+            >
+              <div style={{ width: `${Math.round(loading * 100)}%` }} />
             </div>
+            <p>{t(`Loading ${Math.round(loading * 100)}%`)}</p>
           </div>
         )}
-        {!noGl && phase === "ready" && !locked && (
+        {!noGl &&
+          loading === null &&
+          phase === "ready" &&
+          locked &&
+          !sessionReady && (
+            <div className="crowd-overlay">
+              <p role="status">{t("Loading your game…")}</p>
+            </div>
+          )}
+        {!noGl &&
+          loading === null &&
+          phase === "ready" &&
+          locked &&
+          sessionReady && (
+            <div className="crowd-overlay crowd-gate">
+              <p className="eyebrow">{t(`Level ${level}`)}</p>
+              <h2>{t("Save your progress to keep going")}</h2>
+              <p>
+                {t(
+                  `You've cleared the first ${FREE_LEVELS} levels. Sign in for free to play level ${FREE_LEVELS + 1} and beyond, and pick up where you left off on any device.`,
+                )}
+              </p>
+              <div className="crowd-actions">
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => sdk.requestSignIn()}
+                >
+                  {t("Sign in to keep playing")}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => load(FREE_LEVELS)}
+                >
+                  {t(`Replay level ${FREE_LEVELS}`)}
+                </button>
+              </div>
+            </div>
+          )}
+        {!noGl && loading === null && phase === "ready" && !locked && (
           <div className="crowd-overlay">
             <p className="eyebrow">{t(`Level ${level}`)}</p>
             <h2>{t("Ready to rush?")}</h2>
