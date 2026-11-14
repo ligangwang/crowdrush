@@ -598,3 +598,41 @@
     transform: translateX(4px);
   }
 }
+/* Shown over the stage until the scenery and models have downloaded. */
+.crowd-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: radial-gradient(circle at 50% 40%, #1d2c48, #0b1220 75%);
+  color: #e8edf6;
+  text-align: center;
+}
+.crowd-loading-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.crowd-loading-bar {
+  width: min(320px, calc(100% - 64px));
+  height: 12px;
+  border-radius: 999px;
+  background: #ffffff1f;
+  overflow: hidden;
+}
+.crowd-loading-bar > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3ea6ff, #7ee08a);
+  transition: width 0.2s ease-out;
+}
+.crowd-loading p:last-child {
+  margin: 0;
+  color: #c4ccda;
+  font-variant-numeric: tabular-nums;
+}
