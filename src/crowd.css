@@ -345,6 +345,12 @@
   font-size: 18px;
   line-height: 1;
 }
+.crowd-shop-icon.squad {
+  background: #5a8cff33;
+}
+.crowd-shop-icon.squad::before {
+  content: "🪖";
+}
 .crowd-shop-icon.power {
   background: #ff7a5933;
 }

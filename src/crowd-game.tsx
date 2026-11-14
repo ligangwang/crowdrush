@@ -37,7 +37,7 @@ import {
   type BuyResult,
   type UpgradeKind,
 } from "./crowd-upgrades";
-import type { Perks } from "./crowd-core";
+import { applyPerks, NO_PERKS, startCount, type Perks } from "./crowd-core";
 
 const TEAM = "#3ea6ff";
 const RIVAL = "#ff5a5f";
@@ -137,7 +137,7 @@ export function CrowdGame() {
   // dingn coins picked up on the road this level.
   const [picked, setPicked] = useState(0);
   // Upgrades bought with dingn coins; every level starts with them.
-  const [perks, setPerks] = useState<Perks>({ power: 0, rate: 0 });
+  const [perks, setPerks] = useState<Perks>({ ...NO_PERKS });
   const perksRef = useRef(perks);
   perksRef.current = perks;
   const [buying, setBuying] = useState<UpgradeKind | null>(null);
@@ -159,7 +159,7 @@ export function CrowdGame() {
   // A level waiting to start picks up an upgrade bought just now.
   useEffect(() => {
     const w = world.current;
-    if (w.phase === "ready") w.perks = { ...perks };
+    if (w.phase === "ready") applyPerks(w, perks);
   }, [perks]);
   async function buy(kind: UpgradeKind) {
     const next = nextUpgrade(kind, perksRef.current);
@@ -177,10 +177,16 @@ export function CrowdGame() {
       setShopNote(tRef.current("The upgrade shop is unavailable right now."));
   }
   const locked = needsSignIn(level, !!user);
+  const upgradeName = (kind: UpgradeKind) =>
+    kind === "squad"
+      ? t("Squad")
+      : kind === "power"
+        ? t("Power")
+        : t("Fire rate");
 
   function load(lv: number) {
     world.current = newLevel(lv);
-    world.current.perks = { ...perksRef.current };
+    applyPerks(world.current, perksRef.current);
     const f = fx.current;
     f.sparks = [];
     f.floats = [];
@@ -230,7 +236,7 @@ export function CrowdGame() {
     sfx.current = new Sfx();
     sfx.current.on = s;
     world.current = newLevel(saved);
-    world.current.perks = { ...perksRef.current };
+    applyPerks(world.current, perksRef.current);
     setLevel(saved);
     if (import.meta.env.DEV)
       (window as unknown as { __crowd?: typeof world }).__crowd = world;
@@ -861,13 +867,21 @@ export function CrowdGame() {
               </p>
               {UPGRADE_KINDS.map((kind) => {
                 const next = nextUpgrade(kind, perks);
-                const name = kind === "power" ? t("Power") : t("Fire rate");
+                const name = upgradeName(kind);
                 const per = kind === "power" ? CRIT_PERK : RATE_PERK;
                 const pct = (tier: number) => Math.round(per * tier * 100);
                 const label =
-                  kind === "power" ? t("2× damage chance") : t("Fire speed");
+                  kind === "squad"
+                    ? t("Soldiers at the start")
+                    : kind === "power"
+                      ? t("2× damage chance")
+                      : t("Fire speed");
                 const value = (tier: number) =>
-                  kind === "power" ? `${pct(tier)}%` : `+${pct(tier)}%`;
+                  kind === "squad"
+                    ? String(startCount({ ...NO_PERKS, squad: tier }))
+                    : kind === "power"
+                      ? `${pct(tier)}%`
+                      : `+${pct(tier)}%`;
                 return (
                   <div
                     key={kind}
@@ -948,12 +962,12 @@ export function CrowdGame() {
                     <strong>{t("Not enough coins")}</strong>
                     <span>
                       {t(
-                        `${poor.kind === "power" ? t("Power") : t("Fire rate")} +${poor.tier} costs ${poor.price} coins.`,
+                        `${upgradeName(poor.kind)} +${poor.tier} costs ${poor.price} coins.`,
                       )}
                     </span>
                     <span>
                       {t(
-                        "Earn more by clearing levels for badges, or by taking out enemies even when a level fails.",
+                        "Earn more by clearing levels, shooting open coin packs on the road, and taking out enemies even when a level fails.",
                       )}
                     </span>
                   </span>

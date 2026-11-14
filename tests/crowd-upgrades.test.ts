@@ -6,7 +6,15 @@ import {
   nextUpgrade,
   perksFrom,
 } from "../src/crowd-upgrades";
-import { CRIT_PERK, newLevel, shotRate, start, step } from "../src/crowd-core";
+import {
+  applyPerks,
+  CRIT_PERK,
+  newLevel,
+  shotRate,
+  start,
+  startCount,
+  step,
+} from "../src/crowd-core";
 import game from "../game.json" with { type: "json" };
 
 const item = (id: string, owned: boolean) => ({
@@ -24,7 +32,7 @@ test("owned tiers count in order, and the next tier is offered", () => {
     item("rate-1", false),
     item("rate-2", true), // can't own tier 2 without tier 1: ignored
   ]);
-  assert.deepEqual(perks, { power: 2, rate: 0 });
+  assert.deepEqual(perks, { power: 2, rate: 0, squad: 0 });
   assert.deepEqual(nextUpgrade("power", perks), {
     id: "power-3",
     tier: 3,
@@ -35,13 +43,17 @@ test("owned tiers count in order, and the next tier is offered", () => {
     tier: 1,
     price: 50,
   });
-  assert.equal(nextUpgrade("power", { power: 3, rate: 0 }), null);
+  assert.equal(nextUpgrade("power", { power: 3, rate: 0, squad: 0 }), null);
 });
 
 test("prices and tiers match game.json's shop", () => {
-  for (const kind of ["power", "rate"] as const)
+  for (const kind of ["squad", "power", "rate"] as const)
     for (let tier = 1; tier <= 3; tier++) {
-      const next = nextUpgrade(kind, { power: tier - 1, rate: tier - 1 })!;
+      const next = nextUpgrade(kind, {
+        power: tier - 1,
+        rate: tier - 1,
+        squad: tier - 1,
+      })!;
       const listed = game.shop.find((i) => i.id === next.id)!;
       assert.equal(listed.price, next.price);
       assert.equal(
@@ -80,20 +92,22 @@ test("buying reports what happened, and signed-out players own nothing", async (
   assert.deepEqual(await loadPerks(sdk(async () => ({}))), {
     power: 0,
     rate: 1,
+    squad: 0,
   });
   assert.deepEqual(await loadPerks(sdk(async () => ({}), false)), {
     power: 0,
     rate: 0,
+    squad: 0,
   });
 });
 
 test("upgrades fire faster and land critical hits", () => {
   const w = newLevel(3);
   const base = shotRate(w);
-  w.perks = { power: 0, rate: 3 };
+  w.perks = { power: 0, rate: 3, squad: 0 };
   assert.ok(Math.abs(shotRate(w) / base - 1.3) < 1e-9);
   // about 45% of shots crit with 3 power tiers
-  w.perks = { power: 3, rate: 0 };
+  w.perks = { power: 3, rate: 0, squad: 0 };
   w.things = []; // an empty road, so the squad just keeps shooting
   start(w);
   let shots = 0;
@@ -109,4 +123,24 @@ test("upgrades fire faster and land critical hits", () => {
   }
   const share = crits / shots;
   assert.ok(Math.abs(share - CRIT_PERK * 3) < 0.12, `${crits}/${shots}`);
+});
+
+test("the squad upgrade starts each level with more soldiers", () => {
+  const counts = [0, 1, 2, 3].map((squad) =>
+    startCount({ power: 0, rate: 0, squad }),
+  );
+  assert.deepEqual(counts, [1, 4, 7, 11]);
+  assert.deepEqual(
+    perksFrom([item("squad-1", true), item("squad-2", true)]).squad,
+    2,
+  );
+  const w = newLevel(4);
+  applyPerks(w, { power: 0, rate: 0, squad: 3 });
+  assert.equal(w.count, 11);
+  assert.equal(w.best, 11);
+  // a level already under way keeps its squad
+  start(w);
+  w.count = 30;
+  applyPerks(w, { power: 0, rate: 0, squad: 1 });
+  assert.equal(w.count, 30);
 });
