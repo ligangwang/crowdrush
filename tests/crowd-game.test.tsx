@@ -209,6 +209,39 @@ test("signed-out players see the upgrades, and buying asks them to sign in", asy
   expect(calls.signIn).toHaveBeenCalled();
 });
 
+test("once today's coins are collected, the road has no coin packs", async () => {
+  const world = () =>
+    (
+      window as unknown as {
+        __crowd: { current: { coins: { taken: boolean }[] } };
+      }
+    ).__crowd.current;
+  fakeSdk(true);
+  await play({ level: "3", coinsDone: new Date().toISOString().slice(0, 10) });
+  // the 3D scene loads lazily, which can take a while on the first test run
+  const start = await screen.findByRole(
+    "button",
+    { name: "Start" },
+    { timeout: 5000 },
+  );
+  await act(async () => fireEvent.click(start));
+  expect(world().coins.length).toBeGreaterThan(0);
+  expect(world().coins.every((c) => c.taken)).toBe(true);
+  expect(screen.queryByLabelText(/coins picked up/)).toBeNull();
+  cleanup();
+  // a new day brings them back
+  fakeSdk(true);
+  await play({ level: "3", coinsDone: "2000-01-01" });
+  const again = await screen.findByRole(
+    "button",
+    { name: "Start" },
+    { timeout: 5000 },
+  );
+  await act(async () => fireEvent.click(again));
+  expect(world().coins.some((c) => !c.taken)).toBe(true);
+  expect(screen.getByLabelText("0 coins picked up")).toBeTruthy();
+});
+
 test("levels 1 to 5 play without an account", async () => {
   await play({ level: "5" });
   expect(await screen.findByRole("button", { name: "Start" })).toBeTruthy();

@@ -8,6 +8,7 @@ import {
   badgesFor,
   createBadgeTracker,
   earnCoins,
+  utcDay,
   levelBadge,
   tierFor,
 } from "../src/crowd-badges";
@@ -97,7 +98,7 @@ test("a failed unlock stops quietly and is retried next win", async () => {
   assert.deepEqual(await tracker.cleared(sdk, 5, 1), [FIRST_WIN, "level-5"]);
 });
 
-test("earnCoins pays in calls of 10 and stops at the daily limit", async () => {
+test("earnCoins pays in calls of 10 and says when today's coins are spent", async () => {
   const asks: number[] = [];
   let left = 23;
   const rewards = {
@@ -108,9 +109,19 @@ test("earnCoins pays in calls of 10 and stops at the daily limit", async () => {
       return { coins: paid, balance: null, left };
     },
   };
-  assert.equal(await earnCoins(rewards, 13), 13);
+  assert.deepEqual(await earnCoins(rewards, 13), { paid: 13, spent: false });
   assert.deepEqual(asks, [10, 3]);
   asks.length = 0;
-  assert.equal(await earnCoins(rewards, 25), 10);
+  assert.deepEqual(await earnCoins(rewards, 25), { paid: 10, spent: true });
   assert.deepEqual(asks, [10, 10]);
+  // exactly used up counts too
+  left = 5;
+  assert.deepEqual(await earnCoins(rewards, 5), { paid: 5, spent: true });
+  // a test version (left: null) never counts as spent
+  const test = { earn: async () => ({ coins: 0, left: null, test: true }) };
+  assert.deepEqual(await earnCoins(test, 8), { paid: 0, spent: false });
+});
+
+test("utcDay is the UTC date", () => {
+  assert.equal(utcDay(new Date("2026-11-14T23:30:00-05:00")), "2026-11-15");
 });
