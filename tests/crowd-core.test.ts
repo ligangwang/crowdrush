@@ -9,6 +9,8 @@ import {
   lossCoins,
   winCoins,
   levelCoins,
+  heavyRounds,
+  FULL_RATE_COUNT,
   firepower,
   volley,
   MAX_COUNT,
@@ -514,7 +516,36 @@ test("a bigger squad's gunfire is drawn heavier, on a curve", () => {
   assert.equal(firepower(1), 0);
   assert.ok(volley(50) > volley(5) && volley(5) > volley(1));
   assert.equal(volley(1000), 10);
+  // the look keeps growing past the fire-rate cap (about 167 soldiers)
+  assert.ok(volley(500) > volley(170));
+  assert.ok(firepower(999) > firepower(500));
   assert.equal(volley(MAX_COUNT), 10);
   assert.ok(Math.abs(firepower(1000) - 1) < 1e-9);
   assert.ok(firepower(100) > firepower(10));
+});
+
+test("past the fire-rate cap a bigger squad's rounds hit harder", () => {
+  assert.equal(heavyRounds(1), 1);
+  assert.equal(heavyRounds(150), 1);
+  assert.ok(Math.abs(heavyRounds(FULL_RATE_COUNT * 4) - 2) < 1e-9);
+  assert.ok(heavyRounds(999) > 2.4 && heavyRounds(999) < 2.5);
+  // on average a squad of 999 deals about 2.4x the damage a round
+  const w = newLevel(30);
+  w.things = [];
+  w.phase = "run";
+  w.speed = 0;
+  w.count = 999;
+  let shots = 0;
+  let dealt = 0;
+  for (let i = 0; i < 300; i++) {
+    step(w, 1 / 60);
+    for (const b of w.bullets)
+      if (!(b as { seen?: boolean }).seen) {
+        (b as { seen?: boolean }).seen = true;
+        assert.equal(b.dmg, Math.round(b.dmg));
+        shots++;
+        dealt += b.dmg;
+      }
+  }
+  assert.ok(Math.abs(dealt / shots - heavyRounds(999)) < 0.15);
 });
