@@ -505,6 +505,16 @@
   font-weight: 500;
   color: #c4ccda;
 }
+.crowd-coins-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: #ffd45c;
+  text-decoration: underline;
+  cursor: pointer;
+}
 @keyframes crowd-coins-in {
   from {
     opacity: 0;
