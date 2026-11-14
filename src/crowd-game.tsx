@@ -1116,7 +1116,14 @@ export function CrowdGame() {
                   <span className="crowd-loss-note">
                     {t(
                       "Daily coins collected. You can still play to advance levels.",
-                    )}
+                    )}{" "}
+                    <button
+                      type="button"
+                      className="crowd-coins-link"
+                      onClick={() => sdk.navigate("/coins/")}
+                    >
+                      {t("Get more coins")}
+                    </button>
                   </span>
                 )}
                 {!user && (
@@ -1166,7 +1173,14 @@ export function CrowdGame() {
                   <span className="crowd-loss-note">
                     {t(
                       "Daily coins collected. You can still play to advance levels.",
-                    )}
+                    )}{" "}
+                    <button
+                      type="button"
+                      className="crowd-coins-link"
+                      onClick={() => sdk.navigate("/coins/")}
+                    >
+                      {t("Get more coins")}
+                    </button>
                   </span>
                 )}
                 {!user && levelCoins(world.current) > 0 && (

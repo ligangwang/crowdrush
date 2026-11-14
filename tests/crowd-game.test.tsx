@@ -15,6 +15,8 @@ import { loadStore } from "../src/crowd-shared";
 
 const mocks = vi.hoisted(() => ({
   webgl: true,
+  /** Set to make the squad fall on the next game step. */
+  fall: false,
   scene: null as { translate: (text: string) => string } | null,
   /** Holds the scene's downloads until a test lets them finish. */
   hold: null as null | {
@@ -23,6 +25,19 @@ const mocks = vi.hoisted(() => ({
     done: () => void;
   },
 }));
+// The real game rules, except that a test can make the squad fall.
+vi.mock("../src/crowd-core", async (real) => {
+  const core = await real<typeof import("../src/crowd-core")>();
+  return {
+    ...core,
+    step: (w: Parameters<typeof core.step>[0], dt: number) => {
+      if (!mocks.fall || w.phase === "lost") return core.step(w, dt);
+      mocks.fall = false;
+      w.count = 0;
+      w.phase = "lost";
+    },
+  };
+});
 // A stand-in for the three.js scene, so overlays stay up while a test runs.
 vi.mock("../src/crowd-scene", () => ({
   CrowdScene: class {
@@ -109,6 +124,7 @@ beforeEach(() => {
   fakeSdk(false);
   mocks.webgl = true;
   mocks.hold = null;
+  mocks.fall = false;
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 });
 afterEach(() => {
@@ -240,6 +256,37 @@ test("once today's coins are collected, the road has no coin packs", async () =>
   await act(async () => fireEvent.click(again));
   expect(world().coins.some((c) => !c.taken)).toBe(true);
   expect(screen.getByLabelText("0 coins picked up")).toBeTruthy();
+});
+
+test("the run that collects today's last coins offers more coins", async () => {
+  fakeSdk(true);
+  sdk.rewards.earn = async (coins) => ({ coins, left: 0 });
+  await play({ level: "3" });
+  const start = await screen.findByRole(
+    "button",
+    { name: "Start" },
+    { timeout: 5000 },
+  );
+  await act(async () => fireEvent.click(start));
+  const w = (
+    window as unknown as {
+      __crowd: { current: { boss: { hp: number } } };
+    }
+  ).__crowd.current;
+  // the boss is beaten halfway, then the squad falls: a loss that pays
+  w.boss.hp /= 2;
+  mocks.fall = true;
+  const more = await screen.findByRole(
+    "button",
+    { name: "Get more coins" },
+    { timeout: 3000 },
+  );
+  expect(
+    screen.getByText(/Daily coins collected. You can still play/),
+  ).toBeTruthy();
+  fireEvent.click(more);
+  expect(calls.navigate).toHaveBeenCalledWith("/coins/");
+  expect(stored.get("coinsDone")).toBe(new Date().toISOString().slice(0, 10));
 });
 
 test("levels 1 to 5 play without an account", async () => {
