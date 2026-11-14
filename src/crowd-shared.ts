@@ -7,6 +7,8 @@ export const STORE = {
   level: "level",
   best: "best",
   sound: "sound",
+  /** The UTC day on which today's dingn coins were all collected. */
+  coinsDone: "coinsDone",
 };
 type Storage = Pick<DingnGame["storage"], "get" | "set">;
 const cache = new Map<string, string>();

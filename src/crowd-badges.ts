@@ -81,19 +81,28 @@ export const MAX_EARN = 10;
 
 /**
  * Pays `coins` through rewards.earn, in calls of at most MAX_EARN, stopping
- * once dingn's daily limit pays less than asked. Resolves to the coins paid.
+ * once dingn's daily limit pays less than asked. Resolves to the coins paid
+ * and whether today's allowance is now used up.
  */
 export async function earnCoins(
   rewards: Pick<DingnGame["rewards"], "earn">,
   coins: number,
 ) {
   let paid = 0;
+  let spent = false;
   for (let left = coins; left > 0; ) {
     const ask = Math.min(MAX_EARN, left);
-    const got = (await rewards.earn(ask)).coins;
-    paid += got;
+    const got = await rewards.earn(ask);
+    paid += got.coins;
     left -= ask;
-    if (got < ask) break;
+    spent = got.left === 0;
+    if (got.coins < ask) {
+      spent = got.left !== null;
+      break;
+    }
   }
-  return paid;
+  return { paid, spent };
 }
+
+/** Today's date in UTC, the day dingn's daily coin allowance runs by. */
+export const utcDay = (now = new Date()) => now.toISOString().slice(0, 10);

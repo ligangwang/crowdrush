@@ -30,7 +30,7 @@ import {
   type World,
 } from "./crowd-core";
 import type { CrowdScene, SceneFx } from "./crowd-scene";
-import { createBadgeTracker, earnCoins } from "./crowd-badges";
+import { createBadgeTracker, earnCoins, utcDay } from "./crowd-badges";
 import {
   buyUpgrade,
   loadPerks,
@@ -142,6 +142,28 @@ export function CrowdGame() {
   const loadingRef = useRef(true);
   loadingRef.current = loading !== null;
   const [weapon, setWeapon] = useState({ power: 1, rapid: 0 });
+  // Whether today's dingn coins are all collected: then the road has no
+  // coin packs and levels pay nothing, until the next UTC day.
+  const [capped, setCapped] = useState(false);
+  const cappedRef = useRef(false);
+  const isCapped = () => read(STORE.coinsDone) === utcDay();
+  /** Notes an earn: once the allowance is spent, coins stop showing. */
+  const noteEarn = (spent: boolean) => {
+    if (!spent) return;
+    write(STORE.coinsDone, utcDay());
+    cappedRef.current = true;
+    setCapped(true);
+  };
+  /**
+   * Once today's coins are collected, a signed-in player's road has no coin
+   * packs (they are cleared away as if already taken).
+   */
+  function dropPacks(w: World) {
+    cappedRef.current = isCapped();
+    setCapped(cappedRef.current);
+    if (cappedRef.current && uidRef.current)
+      for (const c of w.coins) c.taken = true;
+  }
   // dingn coins picked up on the road this level.
   const [picked, setPicked] = useState(0);
   // Upgrades bought with dingn coins; every level starts with them.
@@ -201,6 +223,7 @@ export function CrowdGame() {
     f.shake = 0;
     f.slamAnim = 0;
     sceneRef.current?.load(world.current);
+    dropPacks(world.current);
     setWeapon({ power: 1, rapid: 0 });
     setPicked(0);
     setLevel(lv);
@@ -212,6 +235,7 @@ export function CrowdGame() {
     if (loadingRef.current) return;
     const w = world.current;
     if (w.phase === "ready" && !needsSignIn(w.level, !!uidRef.current)) {
+      dropPacks(w);
       start(w);
       setPhase("run");
       canvasRef.current?.focus({ preventScroll: true });
@@ -389,20 +413,24 @@ export function CrowdGame() {
       if (w.phase === "lost") {
         const coins = levelCoins(w);
         setLoss({ share: defeated(w), coins: null, limit: false });
-        if (coins > 0 && uidRef.current)
+        if (coins > 0 && uidRef.current && !cappedRef.current)
           earnCoins(sdkRef.current.rewards, coins)
-            .then((paid) =>
-              setLoss((l) => ({ ...l, coins: paid, limit: paid < coins })),
-            )
+            .then(({ paid, spent }) => {
+              setLoss((l) => ({ ...l, coins: paid, limit: spent }));
+              noteEarn(spent);
+            })
             .catch((err) => console.warn("Crowd Rush coins", err));
       }
       if (w.phase === "won") {
         setResult({ count: w.count, stars: stars(w) });
         const coins = levelCoins(w);
         setPrize({ coins: null, limit: false });
-        if (uidRef.current)
+        if (uidRef.current && !cappedRef.current)
           earnCoins(sdkRef.current.rewards, coins)
-            .then((paid) => setPrize({ coins: paid, limit: paid < coins }))
+            .then(({ paid, spent }) => {
+              setPrize({ coins: paid, limit: spent });
+              noteEarn(spent);
+            })
             .catch((err) => console.warn("Crowd Rush coins", err));
         void badges.current?.cleared(sdkRef.current, w.level, stars(w));
         const saved = mergeProgress(localProgress(), {
@@ -842,16 +870,17 @@ export function CrowdGame() {
                 )}
               </span>
             )}
-            {(picked > 0 || phase === "run" || phase === "boss") && (
-              <span
-                ref={walletRef}
-                className="crowd-hud-coins"
-                aria-label={t(`${picked} coins picked up`)}
-              >
-                <span className="crowd-coin" aria-hidden />
-                {picked}
-              </span>
-            )}
+            {!(capped && user) &&
+              (picked > 0 || phase === "run" || phase === "boss") && (
+                <span
+                  ref={walletRef}
+                  className="crowd-hud-coins"
+                  aria-label={t(`${picked} coins picked up`)}
+                >
+                  <span className="crowd-coin" aria-hidden />
+                  {picked}
+                </span>
+              )}
           </span>
           <button type="button" aria-pressed={sound} onClick={toggleSound}>
             {sound ? t("Sound on") : t("Sound off")}
@@ -1085,9 +1114,7 @@ export function CrowdGame() {
                 )}
                 {prize.limit && (
                   <span className="crowd-loss-note">
-                    {t(
-                      "Daily coin limit reached. Come back tomorrow for more.",
-                    )}
+                    {t("Daily coins collected. Come back tomorrow for more.")}
                   </span>
                 )}
                 {!user && (
@@ -1135,9 +1162,7 @@ export function CrowdGame() {
                 )}
                 {loss.limit && (
                   <span className="crowd-loss-note">
-                    {t(
-                      "Daily coin limit reached. Come back tomorrow for more.",
-                    )}
+                    {t("Daily coins collected. Come back tomorrow for more.")}
                   </span>
                 )}
                 {!user && levelCoins(world.current) > 0 && (
@@ -1145,7 +1170,7 @@ export function CrowdGame() {
                     {t("Sign in to earn coins for that.")}
                   </span>
                 )}
-                {user && levelCoins(world.current) === 0 && (
+                {user && !capped && levelCoins(world.current) === 0 && (
                   <span className="crowd-loss-note">
                     {t("Take out 20% to earn a coin.")}
                   </span>
