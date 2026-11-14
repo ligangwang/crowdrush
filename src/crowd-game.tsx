@@ -1114,7 +1114,9 @@ export function CrowdGame() {
                 )}
                 {prize.limit && (
                   <span className="crowd-loss-note">
-                    {t("Daily coins collected. Come back tomorrow for more.")}
+                    {t(
+                      "Daily coins collected. You can still play to advance levels.",
+                    )}
                   </span>
                 )}
                 {!user && (
@@ -1162,7 +1164,9 @@ export function CrowdGame() {
                 )}
                 {loss.limit && (
                   <span className="crowd-loss-note">
-                    {t("Daily coins collected. Come back tomorrow for more.")}
+                    {t(
+                      "Daily coins collected. You can still play to advance levels.",
+                    )}
                   </span>
                 )}
                 {!user && levelCoins(world.current) > 0 && (
