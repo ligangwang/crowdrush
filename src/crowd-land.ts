@@ -230,6 +230,8 @@ export function groundMaterial(edge: number) {
   const done = () => {
     // Plain green until the turf arrives, then the photograph.
     if (++ready < 3) return;
+    // a picture that failed to download keeps the meadow plain green
+    if (!grass.image || !grassN.image || !gravel.image) return;
     material.color.set(0xffffff);
     material.userData.ready = 1;
     if (material.userData.shader)
