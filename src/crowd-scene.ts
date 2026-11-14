@@ -1274,7 +1274,10 @@ function boxUv(
     [W, H],
   ];
   for (let i = 0; i < uv.count; i++) {
-    const [u, v] = spans[Math.floor(i / 4)];
+    const face = Math.floor(i / 4);
+    // the front (+z) shows the painted canvas, which must fill it exactly
+    if (face === 4) continue;
+    const [u, v] = spans[face];
     uv.setXY(i, (uv.getX(i) * u) / size, (uv.getY(i) * v) / size);
   }
   return geo;
