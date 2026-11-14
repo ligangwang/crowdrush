@@ -17,6 +17,8 @@ import {
   rng,
   squadRadius,
   type Block,
+  packSize,
+  type Coin,
   type Gate,
   type Monster,
   type Upgrade,
@@ -1079,6 +1081,126 @@ class BlockView {
   }
 }
 
+/** Shared geometry and materials for the level's coin packs. */
+type CoinParts = ReturnType<typeof coinParts>;
+function coinParts(
+  keep: <G extends THREE.BufferGeometry>(g: G) => G,
+  mat: <M extends THREE.Material>(m: M) => M,
+) {
+  // a flat coin for the piles, and a big coin on edge: a bright rim around a
+  // deeper face with a raised star, so it reads as a coin from any angle
+  const flatCoin = keep(new THREE.CylinderGeometry(0.15, 0.15, 0.05, 18));
+  const rim = keep(new THREE.CylinderGeometry(0.42, 0.42, 0.1, 32));
+  rim.rotateX(Math.PI / 2);
+  const face = keep(new THREE.CylinderGeometry(0.33, 0.33, 0.13, 32));
+  face.rotateX(Math.PI / 2);
+  const starShape = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+    const r = i % 2 ? 0.08 : 0.2;
+    if (i) starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    else starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const star = keep(
+    new THREE.ExtrudeGeometry(starShape, { depth: 0.17, bevelEnabled: false }),
+  );
+  star.translate(0, 0, -0.085);
+  const glow = keep(new THREE.RingGeometry(0.45, 0.62, 40));
+  glow.rotateX(-Math.PI / 2);
+  const gold = (color: number, emissive: number) =>
+    mat(
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive,
+        metalness: 0.6,
+        roughness: 0.28,
+      }),
+    );
+  return {
+    flatCoin,
+    rim,
+    face,
+    star,
+    glow,
+    bright: gold(0xffd34a, 0x6a4300),
+    deep: gold(0xf0a81c, 0x5a3200),
+    pale: gold(0xfff0a0, 0x7a5a10),
+    glowMat: mat(
+      new THREE.MeshBasicMaterial({
+        color: 0xffbf1a,
+        transparent: true,
+        opacity: 0.5,
+        depthWrite: false,
+      }),
+    ),
+  };
+}
+
+/**
+ * A coin pack on the road: a pile of gold coin stacks, more for a fuller
+ * pack, a big coin spinning above it, and a soft gold glow on the road. Each
+ * hit makes it jump and flash.
+ */
+class CoinPackView {
+  group = new THREE.Group();
+  private spinner = new THREE.Group();
+  private pile = new THREE.Group();
+  private hp: number;
+  private kick = 0;
+  constructor(
+    readonly coin: Coin,
+    private parts: CoinParts,
+  ) {
+    const r = rng(coin.id * 977 + 3);
+    const size = packSize(coin.value);
+    // stacks of flat coins, tallest in the middle
+    const stacks = 3 + Math.round(((coin.value - 3) / 7) * 4);
+    for (let s = 0; s < stacks; s++) {
+      const a = (s / stacks) * Math.PI * 2 + r();
+      const d = s === 0 ? 0 : 0.17 + r() * 0.06;
+      const n = (s === 0 ? 5 : 2) + Math.floor(r() * (2 + coin.value / 3));
+      for (let k = 0; k < n; k++) {
+        const m = new THREE.Mesh(
+          parts.flatCoin,
+          k === n - 1 ? parts.pale : k % 2 ? parts.deep : parts.bright,
+        );
+        m.position.set(
+          Math.cos(a) * d + (r() - 0.5) * 0.02,
+          0.025 + k * 0.05,
+          Math.sin(a) * d + (r() - 0.5) * 0.02,
+        );
+        m.rotation.set((r() - 0.5) * 0.08, 0, (r() - 0.5) * 0.08);
+        m.castShadow = true;
+        this.pile.add(m);
+      }
+    }
+    const rim = new THREE.Mesh(parts.rim, parts.bright);
+    const face = new THREE.Mesh(parts.face, parts.deep);
+    const star = new THREE.Mesh(parts.star, parts.pale);
+    rim.castShadow = true;
+    this.spinner.add(rim, face, star);
+    const glow = new THREE.Mesh(parts.glow, parts.glowMat);
+    glow.position.y = 0.03;
+    glow.scale.setScalar(1.15);
+    this.group.add(glow, this.pile, this.spinner);
+    this.group.scale.setScalar(size);
+    this.group.position.set(coin.x * ROAD, 0, -coin.z);
+    this.hp = coin.hp;
+  }
+  update(clock: number, dt: number) {
+    if (this.coin.hp < this.hp) {
+      this.hp = this.coin.hp;
+      this.kick = 1;
+    }
+    this.kick = Math.max(0, this.kick - dt * 6);
+    const t = clock + this.coin.id;
+    this.spinner.position.y = 0.88 + Math.sin(t * 3) * 0.07 + this.kick * 0.12;
+    this.spinner.rotation.y = t * 2.4;
+    const squash = 1 + this.kick * 0.12;
+    this.pile.scale.set(squash, 1 / squash, squash);
+  }
+}
+
 function labelTexture(text: string, color: string) {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
@@ -1117,6 +1239,8 @@ export class CrowdScene {
   private levelMats: THREE.Material[] = [];
   private gateFrame = flat(0xf4f6fb);
   private ring: THREE.Mesh;
+  /** The level's coin packs; rebuilt with the level. */
+  private packs: CoinPackView[] = [];
   private camX = 0;
   private camPull = 0;
   private bossDead = 0;
@@ -1453,6 +1577,16 @@ export class CrowdScene {
     line.position.set(0, 0.025, -(w.boss.z - BOSS_STOP - 1));
     this.level.add(line);
 
+    // coin packs: a pile of gold coins under a big spinning coin
+    if (w.coins.length) {
+      const parts = coinParts(keep, mat);
+      for (const c of w.coins) {
+        const v = new CoinPackView(c, parts);
+        this.packs.push(v);
+        this.level.add(v.group);
+      }
+    }
+
     for (const th of w.things) {
       if (th.kind === "gate") {
         const g = new GateView(th, this.gateFrame);
@@ -1506,6 +1640,7 @@ export class CrowdScene {
     }
     this.levelGeos = [];
     this.levelMats = [];
+    this.packs = [];
     this.level.clear();
   }
 
@@ -1549,6 +1684,13 @@ export class CrowdScene {
     for (const b of this.blocks.values()) {
       b.group.visible = !b.block.dead && b.block.z > near && b.block.z < far;
       if (b.group.visible) b.paint();
+    }
+
+    // coin packs
+    for (const p of this.packs) {
+      const c = p.coin;
+      p.group.visible = !c.taken && c.z > w.z - 1 && c.z < far;
+      if (p.group.visible) p.update(clock, dt);
     }
 
     // squads

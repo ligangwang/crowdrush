@@ -7,6 +7,7 @@ import {
   THREE_STARS,
   badgesFor,
   createBadgeTracker,
+  earnCoins,
   levelBadge,
   tierFor,
 } from "../src/crowd-badges";
@@ -94,4 +95,22 @@ test("a failed unlock stops quietly and is retried next win", async () => {
   assert.deepEqual(await tracker.cleared(sdk, 5, 1), []);
   fail = false;
   assert.deepEqual(await tracker.cleared(sdk, 5, 1), [FIRST_WIN, "level-5"]);
+});
+
+test("earnCoins pays in calls of 10 and stops at the daily limit", async () => {
+  const asks: number[] = [];
+  let left = 23;
+  const rewards = {
+    earn: async (coins: number) => {
+      asks.push(coins);
+      const paid = Math.min(coins, left);
+      left -= paid;
+      return { coins: paid, balance: null, left };
+    },
+  };
+  assert.equal(await earnCoins(rewards, 13), 13);
+  assert.deepEqual(asks, [10, 3]);
+  asks.length = 0;
+  assert.equal(await earnCoins(rewards, 25), 10);
+  assert.deepEqual(asks, [10, 10]);
 });

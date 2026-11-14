@@ -66,6 +66,21 @@ export type Monster = {
   dead: boolean;
 };
 export type Thing = Gate | Block | Squad | Monster;
+/**
+ * A pack of dingn coins on the road, showing a number: shoot it down to zero
+ * and the squad collects its coins.
+ */
+export type Coin = {
+  kind: "coin";
+  id: number;
+  z: number;
+  x: number;
+  hp: number;
+  maxHp: number;
+  /** dingn coins inside. */
+  value: number;
+  taken: boolean;
+};
 export type Boss = {
   z: number;
   hp: number;
@@ -94,7 +109,7 @@ export type GameEvent =
       type: "hit";
       x: number;
       z: number;
-      target: "block" | "squad" | "boss" | "monster";
+      target: "block" | "squad" | "boss" | "monster" | "coin";
     }
   | { type: "kill"; x: number; z: number; big: boolean; reward: number }
   | { type: "bite"; x: number; z: number; lost: number }
@@ -104,6 +119,7 @@ export type GameEvent =
   | { type: "clash"; x: number; z: number; lost: number }
   | { type: "slam"; lost: number }
   | { type: "upgrade"; kind: Upgrade; level: number; x: number; z: number }
+  | { type: "coin"; x: number; z: number; value: number }
   | { type: "won" }
   | { type: "lost" };
 export type World = {
@@ -117,6 +133,9 @@ export type World = {
   best: number;
   speed: number;
   things: Thing[];
+  /** dingn coins on the road, and how many the squad has picked up. */
+  coins: Coin[];
+  picked: number;
   boss: Boss;
   bullets: Bullet[];
   /** Damage per shot, raised by power crates. */
@@ -524,6 +543,8 @@ export function newLevel(level: number): World {
       );
   }
   things.sort((a, b) => a.z - b.z);
+  const coins = placeCoins(lv, things, checkpoints, firstGate, length, id);
+  id += coins.length;
 
   // Levels 1 to 10 are eased in so new players find their feet: monsters
   // and the boss are weaker and the boss is slower, by 30% on level 1,
@@ -551,6 +572,8 @@ export function newLevel(level: number): World {
     best: START_COUNT,
     speed: RUN_SPEED,
     things,
+    coins,
+    picked: 0,
     boss: {
       z: length,
       hp: bossHp,
@@ -572,6 +595,73 @@ export function newLevel(level: number): World {
     random,
     nextId: id,
   };
+}
+
+/** Coin packs along each level's road: 2 or 3, holding 3 to 10 coins each. */
+export const MIN_COIN_PACKS = 2;
+export const MAX_COIN_PACKS = 3;
+export const MIN_PACK_COINS = 3;
+export const MAX_PACK_COINS = 10;
+/** How big a coin pack is drawn: fuller packs are bigger. */
+export const packSize = (value: number) => 1.2 + (value - 3) * 0.06;
+/** How wide a coin pack is to a bullet, in road units. */
+export const COIN_HALF = 0.14;
+/**
+ * Puts 2 or 3 coin packs along the road, one in each stretch between the
+ * first gate and the horde, in a random lane but clear of gates and crates.
+ * A pack's number is about 0.75 to 1.4 seconds of the squad's expected
+ * firepower at that point, more for a fuller pack, so it grows level by level
+ * and a pack can be broken in the two seconds it is in range by keeping the
+ * squad lined up with it. A stream of its own keeps the rest of the layout the
+ * same.
+ */
+function placeCoins(
+  lv: number,
+  things: Thing[],
+  checkpoints: { z: number; expected: number; gun: number }[],
+  from: number,
+  length: number,
+  firstId: number,
+): Coin[] {
+  const roll = rng(lv * 7477 + 11);
+  const solid = things
+    .filter((t) => t.kind === "gate" || t.kind === "block")
+    .map((t) => t.z);
+  const start = from + 6;
+  const packs =
+    MIN_COIN_PACKS + Math.floor(roll() * (MAX_COIN_PACKS - MIN_COIN_PACKS + 1));
+  const span = (length - BOSS_STOP - 30 - start) / packs;
+  // levels 1 to 10 are eased in, as for the monsters
+  const soften = 1 - 0.3 * (Math.max(0, 11 - lv) / 10);
+  const coins: Coin[] = [];
+  for (let i = 0; i < packs; i++) {
+    let z = start + span * (i + 0.15 + roll() * 0.7);
+    for (
+      let tries = 0;
+      tries < 8 && solid.some((s) => Math.abs(s - z) < 4);
+      tries++
+    )
+      z += 3;
+    const value =
+      MIN_PACK_COINS +
+      Math.floor(roll() * (MAX_PACK_COINS - MIN_PACK_COINS + 1));
+    const near = [...checkpoints].reverse().find((c) => c.z <= z);
+    const dps =
+      fireRate(Math.max(START_COUNT, near?.expected ?? START_COUNT)) *
+      Math.sqrt(near?.gun ?? 1);
+    const hp = Math.max(value, Math.round(dps * (0.5 + value * 0.09) * soften));
+    coins.push({
+      kind: "coin",
+      id: firstId + i,
+      z,
+      x: [-0.62, 0, 0.62][Math.floor(roll() * 3)],
+      hp,
+      maxHp: hp,
+      value,
+      taken: false,
+    });
+  }
+  return coins;
 }
 
 function monster(
@@ -699,7 +789,7 @@ export function step(w: World, dt: number) {
       b.dead = true;
       continue;
     }
-    let hit: Thing | "boss" | undefined;
+    let hit: Thing | Coin | "boss" | undefined;
     let hitZ = Infinity;
     for (const t of w.things) {
       if (t.kind === "gate" || t.dead) continue;
@@ -715,6 +805,14 @@ export function step(w: World, dt: number) {
         hitZ = t.z;
       }
     }
+    for (const c of w.coins) {
+      if (c.taken || c.z < from - 0.5 || c.z > b.z + 0.5 || c.z >= hitZ)
+        continue;
+      if (Math.abs(b.x - c.x) <= COIN_HALF) {
+        hit = c;
+        hitZ = c.z;
+      }
+    }
     if (!hit && w.boss.hp > 0 && b.z >= w.boss.z - 1.5 && Math.abs(b.x) < 0.75)
       hit = "boss";
     if (!hit) continue;
@@ -727,6 +825,14 @@ export function step(w: World, dt: number) {
         w.bullets = [];
         w.events.push({ type: "won" });
         return;
+      }
+    } else if (hit.kind === "coin") {
+      hit.hp = Math.max(0, hit.hp - b.dmg);
+      w.events.push({ type: "hit", x: b.x, z: hit.z, target: "coin" });
+      if (hit.hp <= 0) {
+        hit.taken = true;
+        w.picked += hit.value;
+        w.events.push({ type: "coin", x: hit.x, z: hit.z, value: hit.value });
       }
     } else if (hit.kind === "block") {
       hit.hp = Math.max(0, hit.hp - b.dmg);
@@ -894,3 +1000,18 @@ export function defeated(w: World) {
 export const LOSS_COINS = 5;
 export const lossCoins = (w: World) =>
   Math.floor(defeated(w) * LOSS_COINS + 1e-9);
+
+/**
+ * dingn coins for a cleared level: 5, plus 1 for each star (6 to 8), so a
+ * win always pays more than a loss. Level badges pay on top, every 5 levels.
+ */
+export const WIN_COINS = 5;
+export const winCoins = (stars: number) =>
+  WIN_COINS + Math.max(0, Math.min(3, stars));
+/**
+ * Everything a finished level pays: the win (or the share of a loss) plus
+ * the coins picked up on the road. dingn caps what a game pays for play each
+ * UTC day (200 coins a player).
+ */
+export const levelCoins = (w: World) =>
+  w.picked + (w.phase === "won" ? winCoins(stars(w)) : lossCoins(w));

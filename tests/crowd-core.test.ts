@@ -7,6 +7,12 @@ import {
   crowdRadius,
   defeated,
   lossCoins,
+  winCoins,
+  levelCoins,
+  MAX_COIN_PACKS,
+  MIN_COIN_PACKS,
+  MAX_PACK_COINS,
+  MIN_PACK_COINS,
   newLevel,
   progress,
   RUN_SPEED,
@@ -436,4 +442,66 @@ test("a failed level pays a coin for every 20% of the enemies destroyed", () => 
   assert.equal(defeated(w), 0.75);
   w.boss.hp = 0;
   assert.equal(lossCoins(w), 5);
+});
+
+test("a cleared level pays 5 coins plus 1 a star, more than any loss", () => {
+  assert.equal(winCoins(1), 6);
+  assert.equal(winCoins(3), 8);
+});
+
+test("every level lays 2 or 3 coin packs on the road, clear of gates and crates", () => {
+  for (const lv of [1, 7, 12, 40]) {
+    const w = newLevel(lv);
+    assert.ok(
+      w.coins.length >= MIN_COIN_PACKS && w.coins.length <= MAX_COIN_PACKS,
+    );
+    const solid = w.things.filter(
+      (t) => t.kind === "gate" || t.kind === "block",
+    );
+    for (const c of w.coins) {
+      assert.ok(c.z > solid[0].z && c.z < w.boss.z - BOSS_STOP, `${lv}`);
+      assert.ok(Math.abs(c.x) < 0.7);
+      assert.ok(c.value >= MIN_PACK_COINS && c.value <= MAX_PACK_COINS);
+      assert.ok(c.hp >= c.value);
+    }
+    // ids stay unique
+    const ids = new Set([...w.things, ...w.coins].map((t) => t.id));
+    assert.equal(ids.size, w.things.length + w.coins.length);
+  }
+  // the rest of the layout doesn't change with the coins in it
+  assert.deepEqual(
+    newLevel(12).things.map((t) => t.z),
+    newLevel(12).things.map((t) => t.z),
+  );
+});
+
+test("shooting a coin pack down to zero collects its coins", () => {
+  const w = newLevel(12);
+  w.things = [];
+  const [c] = w.coins;
+  const missed = { ...c, id: 999, x: c.x === 0 ? 0.62 : 0, z: c.z + 0.5 };
+  w.coins = [c, missed];
+  w.phase = "run";
+  w.count = 60;
+  w.power = 2;
+  w.z = c.z - 25;
+  w.x = w.targetX = c.x;
+  let hits = 0;
+  while (!c.taken && w.z < c.z) {
+    step(w, 1 / 60);
+    hits += w.events.filter(
+      (e) => e.type === "hit" && e.target === "coin",
+    ).length;
+    w.events.length = 0;
+    w.targetX = c.x;
+  }
+  assert.ok(c.taken, "broken before the squad reached it");
+  assert.equal(c.hp, 0);
+  assert.ok(hits > 0);
+  assert.equal(w.picked, c.value);
+  // a pack in another lane isn't touched
+  assert.ok(!missed.taken && missed.hp === missed.maxHp);
+  // a loss pays the coins collected on top of its share
+  w.phase = "lost";
+  assert.equal(levelCoins(w), lossCoins(w) + c.value);
 });

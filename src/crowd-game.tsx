@@ -15,7 +15,8 @@ import {
   CRIT_PERK,
   RATE_PERK,
   defeated,
-  lossCoins,
+  levelCoins,
+  packSize,
   newLevel,
   progress,
   stars,
@@ -26,7 +27,7 @@ import {
   type World,
 } from "./crowd-core";
 import type { CrowdScene, SceneFx } from "./crowd-scene";
-import { createBadgeTracker } from "./crowd-badges";
+import { createBadgeTracker, earnCoins } from "./crowd-badges";
 import {
   buyUpgrade,
   loadPerks,
@@ -87,6 +88,9 @@ export function CrowdGame() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
+  // Coins flying from a broken pack to the coin counter in the corner.
+  const fliesRef = useRef<HTMLDivElement>(null);
+  const walletRef = useRef<HTMLSpanElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const bossBarRef = useRef<HTMLDivElement>(null);
   const bossFillRef = useRef<HTMLDivElement>(null);
@@ -121,9 +125,17 @@ export function CrowdGame() {
     coins: number | null;
     limit: boolean;
   }>({ share: 0, coins: null, limit: false });
+  // Coins a cleared level paid (null while asking, or signed out), and
+  // whether dingn's daily limit held some back.
+  const [prize, setPrize] = useState<{ coins: number | null; limit: boolean }>({
+    coins: null,
+    limit: false,
+  });
   const [sound, setSound] = useState(true);
   const [noGl, setNoGl] = useState(false);
   const [weapon, setWeapon] = useState({ power: 1, rapid: 0 });
+  // dingn coins picked up on the road this level.
+  const [picked, setPicked] = useState(0);
   // Upgrades bought with dingn coins; every level starts with them.
   const [perks, setPerks] = useState<Perks>({ power: 0, rate: 0 });
   const perksRef = useRef(perks);
@@ -176,6 +188,7 @@ export function CrowdGame() {
     f.slamAnim = 0;
     sceneRef.current?.load(world.current);
     setWeapon({ power: 1, rapid: 0 });
+    setPicked(0);
     setLevel(lv);
     setPhase("ready");
   }
@@ -347,22 +360,23 @@ export function CrowdGame() {
     if (was !== w.phase) {
       setPhase(w.phase);
       if (w.phase === "lost") {
-        const coins = lossCoins(w);
+        const coins = levelCoins(w);
         setLoss({ share: defeated(w), coins: null, limit: false });
         if (coins > 0 && uidRef.current)
-          sdkRef.current.rewards
-            .earn(coins)
+          earnCoins(sdkRef.current.rewards, coins)
             .then((paid) =>
-              setLoss((l) => ({
-                ...l,
-                coins: paid.coins,
-                limit: paid.coins < coins,
-              })),
+              setLoss((l) => ({ ...l, coins: paid, limit: paid < coins })),
             )
             .catch((err) => console.warn("Crowd Rush coins", err));
       }
       if (w.phase === "won") {
         setResult({ count: w.count, stars: stars(w) });
+        const coins = levelCoins(w);
+        setPrize({ coins: null, limit: false });
+        if (uidRef.current)
+          earnCoins(sdkRef.current.rewards, coins)
+            .then((paid) => setPrize({ coins: paid, limit: paid < coins }))
+            .catch((err) => console.warn("Crowd Rush coins", err));
         void badges.current?.cleared(sdkRef.current, w.level, stars(w));
         const saved = mergeProgress(localProgress(), {
           level: w.level + 1,
@@ -464,7 +478,9 @@ export function CrowdGame() {
               ? RIVAL
               : e.target === "monster"
                 ? "#8be04e"
-                : "#ffd36a";
+                : e.target === "coin"
+                  ? "#ffe680"
+                  : "#ffd36a";
           burst(e.x, e.z, 0.6, c, 2, 1.5);
           sfx.current?.play(e);
         }
@@ -484,6 +500,11 @@ export function CrowdGame() {
         setWeapon({ power: w.power, rapid: w.rapid });
         break;
       }
+      case "coin":
+        float(`+${e.value}`, e.x, e.z, 1.6, "#ffd84a", true);
+        burst(e.x, e.z, 0.8, "#ffd84a", 30, 4);
+        flyCoins(e.x, e.z, e.value, w.picked);
+        break;
       case "crate":
         float(`+${e.reward}`, e.x, e.z, 1.6, "#ffe066", true);
         burst(e.x, e.z, 0.7, "#ffcf3a", 30, 4);
@@ -531,6 +552,56 @@ export function CrowdGame() {
     }
   }
 
+  /**
+   * Sends a broken pack's coins flying from the road to the coin counter,
+   * which counts up as they land.
+   */
+  function flyCoins(x: number, z: number, value: number, total: number) {
+    const scene = sceneRef.current;
+    const root = fliesRef.current;
+    const wallet = walletRef.current;
+    if (!scene || !root || !wallet) return setPicked(total);
+    const from = scene.project(x, z, 0.8);
+    const box = root.getBoundingClientRect();
+    const to = wallet.getBoundingClientRect();
+    const tx = to.left - box.left + 12;
+    const ty = to.top - box.top + to.height / 2;
+    const n = Math.min(8, value * 3);
+    for (let i = 0; i < n; i++) {
+      const el = document.createElement("span");
+      el.className = "crowd-fly-coin";
+      root.appendChild(el);
+      const sx = from.x + (Math.random() - 0.5) * 40;
+      const sy = from.y + (Math.random() - 0.5) * 30;
+      const mx = (sx + tx) / 2 + (Math.random() - 0.5) * 120;
+      const my = Math.min(sy, ty) - 40 - Math.random() * 60;
+      const delay = i * 45;
+      const done = () => {
+        el.remove();
+        if (i === n - 1) {
+          setPicked(total);
+          wallet.dataset.bump = String(Date.now() % 2);
+        }
+      };
+      if (typeof el.animate !== "function") {
+        done();
+        continue;
+      }
+      el.animate(
+        [
+          { transform: `translate(${sx}px, ${sy}px) scale(0.6)`, opacity: 0 },
+          {
+            transform: `translate(${mx}px, ${my}px) scale(1.15)`,
+            opacity: 1,
+            offset: 0.45,
+          },
+          { transform: `translate(${tx}px, ${ty}px) scale(0.7)`, opacity: 1 },
+        ],
+        { duration: 650, delay, easing: "ease-in", fill: "both" },
+      ).onfinish = done;
+    }
+  }
+
   /** Count bubbles and floating numbers, placed over the 3D view each frame. */
   function overlay(scene: CrowdScene) {
     const root = labelsRef.current;
@@ -569,6 +640,18 @@ export function CrowdGame() {
             x: p.x,
             y: p.y,
             cls: "crowd3d-count rival",
+          });
+      }
+    // the number on each coin pack: shots left to break it open
+    for (const c of w.coins)
+      if (!c.taken && c.z > w.z && c.z - w.z < 70) {
+        const p = scene.project(c.x, c.z, 1.75 * packSize(c.value));
+        if (p.visible)
+          items.push({
+            text: String(c.hp),
+            x: p.x,
+            y: p.y,
+            cls: "crowd3d-count coin",
           });
       }
     for (const fl of f.floats) {
@@ -671,6 +754,7 @@ export function CrowdGame() {
           onContextMenu={(e) => e.preventDefault()}
         />
         <div className="crowd3d-labels" ref={labelsRef} aria-hidden="true" />
+        <div className="crowd3d-flies" ref={fliesRef} aria-hidden="true" />
         <div className="crowd3d-bars" aria-hidden="true">
           <div className="crowd3d-progress">
             <div ref={progressRef} />
@@ -695,6 +779,16 @@ export function CrowdGame() {
                 {weapon.rapid > 0 && (
                   <b className="rate">RATE +{weapon.rapid}</b>
                 )}
+              </span>
+            )}
+            {(picked > 0 || phase === "run" || phase === "boss") && (
+              <span
+                ref={walletRef}
+                className="crowd-hud-coins"
+                aria-label={t(`${picked} coins picked up`)}
+              >
+                <span className="crowd-coin" aria-hidden />
+                {picked}
               </span>
             )}
           </span>
@@ -888,6 +982,28 @@ export function CrowdGame() {
             </p>
             <h2>{t("Boss down!")}</h2>
             <p>{t(`${result.count} of your squad made it.`)}</p>
+            {(prize.coins || prize.limit || !user) && (
+              <p className="crowd-loss">
+                {prize.coins != null && prize.coins > 0 && (
+                  <span className="crowd-loss-coins">
+                    <span className="crowd-coin" aria-hidden />
+                    {t(`+${prize.coins} coins`)}
+                  </span>
+                )}
+                {prize.limit && (
+                  <span className="crowd-loss-note">
+                    {t(
+                      "Daily coin limit reached. Come back tomorrow for more.",
+                    )}
+                  </span>
+                )}
+                {!user && (
+                  <span className="crowd-loss-note">
+                    {t("Sign in to earn coins for every level you clear.")}
+                  </span>
+                )}
+              </p>
+            )}
             {needsSignIn(level + 1, !!user) && (
               <p>
                 {t(
@@ -912,11 +1028,12 @@ export function CrowdGame() {
         {phase === "lost" && (
           <div className="crowd-overlay">
             <h2>{t("Squad wiped out")}</h2>
-            {loss.share > 0 && (
+            {(loss.share > 0 || picked > 0) && (
               <p className="crowd-loss">
-                {t(
-                  `You took out ${Math.round(loss.share * 100)}% of the enemies.`,
-                )}
+                {loss.share > 0 &&
+                  t(
+                    `You took out ${Math.round(loss.share * 100)}% of the enemies.`,
+                  )}
                 {loss.coins != null && loss.coins > 0 && (
                   <span className="crowd-loss-coins">
                     <span className="crowd-coin" aria-hidden />
@@ -930,12 +1047,12 @@ export function CrowdGame() {
                     )}
                   </span>
                 )}
-                {!user && lossCoins(world.current) > 0 && (
+                {!user && levelCoins(world.current) > 0 && (
                   <span className="crowd-loss-note">
                     {t("Sign in to earn coins for that.")}
                   </span>
                 )}
-                {user && lossCoins(world.current) === 0 && (
+                {user && levelCoins(world.current) === 0 && (
                   <span className="crowd-loss-note">
                     {t("Take out 20% to earn a coin.")}
                   </span>
