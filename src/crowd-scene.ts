@@ -48,7 +48,6 @@ import {
   SUN_DIR,
   forest,
   groundMaterial,
-  picture,
   preloadLand,
   shadeTexture,
   skyDome,
@@ -962,8 +961,6 @@ class BlockView {
   private mats: THREE.Material[];
   private geos: THREE.BufferGeometry[] = [];
   private sprite?: THREE.Sprite;
-  /** Width in metres, so the painted front matches the sides' grain. */
-  private span = 1;
   constructor(
     readonly block: Block,
     rewardTex?: THREE.Texture,
@@ -996,19 +993,33 @@ class BlockView {
       });
     const side = surface(up ? tint[0] : crate ? 0xf2d2a8 : 0xd8d2c8);
     const top = surface(up ? tint[1] : crate ? 0xffe2b8 : 0xe4ded4);
-    const front = new THREE.MeshStandardMaterial({
-      map: this.tex,
-      roughness: crate ? 0.78 : 0.92,
-    });
-    this.mats = [side, side, top, side, front, side];
+    this.mats = [side, side, top, side, side, side];
     const geo = boxUv(new THREE.BoxGeometry(W, H, D), W, H, D, crate ? 1.5 : 2);
-    this.span = W;
     this.geos.push(geo);
     const box = new THREE.Mesh(geo, this.mats);
     box.position.y = H / 2;
     box.castShadow = true;
     box.receiveShadow = true;
     this.group.add(box);
+    // the number (and frame, brace or word) is painted on a clear sheet just
+    // in front of the face. No photograph is ever drawn into the canvas:
+    // inside dingn's sandboxed frame that would taint it, and WebGL then
+    // refuses it and draws the whole crate black.
+    const front = new THREE.MeshStandardMaterial({
+      map: this.tex,
+      transparent: true,
+      alphaTest: 0.02,
+      roughness: crate ? 0.78 : 0.92,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+    });
+    this.mats.push(front);
+    const sheetGeo = new THREE.PlaneGeometry(W, H);
+    this.geos.push(sheetGeo);
+    const sheet = new THREE.Mesh(sheetGeo, front);
+    sheet.position.set(0, H / 2, D / 2 + 0.004);
+    sheet.receiveShadow = true;
+    this.group.add(sheet);
     if (up) {
       // a glowing ring marks a weapon crate from far away
       const ring = new THREE.Mesh(
@@ -1042,33 +1053,9 @@ class BlockView {
     if (!ctx) return;
     const { width: w, height: h } = this.canvas;
     const crate = b.reward > 0;
-    const wood = !!b.upgrade || crate;
-    // the photograph under everything, at the same scale as the sides; it
-    // is painted in again once it has loaded
-    const file = b.upgrade
-      ? "planks-paint.jpg"
-      : wood
-        ? "planks.jpg"
-        : "wall.jpg";
-    const img = picture(file, () => {
-      this.hp = -1;
-    });
-    const grain = (tint: string) => {
-      ctx.fillStyle = tint;
-      ctx.fillRect(0, 0, w, h);
-      if (!img) return;
-      const pattern = ctx.createPattern(img, "repeat");
-      if (!pattern) return;
-      const k = ((w / this.span) * (wood ? 1.5 : 2)) / img.width;
-      pattern.setTransform(new DOMMatrix([k, 0, 0, k, 0, 0]));
-      ctx.globalCompositeOperation = "multiply";
-      ctx.fillStyle = pattern;
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalCompositeOperation = "source-over";
-    };
+    ctx.clearRect(0, 0, w, h);
     if (b.upgrade) {
       const power = b.upgrade === "power";
-      grain(power ? "#d8352f" : "#1b9ad6");
       // a dark painted frame and a stencilled word
       ctx.strokeStyle = power ? "#5c120e" : "#0a3c5a";
       ctx.lineWidth = 14;
@@ -1079,7 +1066,6 @@ class BlockView {
       ctx.textBaseline = "top";
       ctx.fillText(this.title, w / 2, h * 0.08, w - 28);
     } else if (crate) {
-      grain("#ffe0b0");
       // a darker frame of boards and a cross brace, nailed on
       ctx.strokeStyle = "rgba(70, 38, 10, 0.55)";
       ctx.lineWidth = 16;
@@ -1102,8 +1088,6 @@ class BlockView {
         ctx.arc(x, y, 3, 0, Math.PI * 2);
         ctx.fill();
       }
-    } else {
-      grain("#ece6dc");
     }
     ctx.font = `900 ${Math.round(Math.min(h * 0.5, 96))}px system-ui, sans-serif`;
     ctx.textAlign = "center";
@@ -1275,10 +1259,7 @@ function boxUv(
     [W, H],
   ];
   for (let i = 0; i < uv.count; i++) {
-    const face = Math.floor(i / 4);
-    // the front (+z) shows the painted canvas, which must fill it exactly
-    if (face === 4) continue;
-    const [u, v] = spans[face];
+    const [u, v] = spans[Math.floor(i / 4)];
     uv.setXY(i, (uv.getX(i) * u) / size, (uv.getY(i) * v) / size);
   }
   return geo;

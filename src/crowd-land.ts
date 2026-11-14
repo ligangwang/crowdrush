@@ -63,20 +63,6 @@ export function tileUv(
   return geo;
 }
 
-/** An image for painting into a canvas (crates and walls), shared. */
-const images = new Map<string, HTMLImageElement>();
-export function picture(file: string, onLoad: () => void) {
-  let img = images.get(file);
-  if (!img) {
-    img = new Image();
-    img.src = BASE + file;
-    images.set(file, img);
-  }
-  if (img.complete && img.naturalWidth) return img;
-  img.addEventListener("load", onLoad, { once: true });
-  return null;
-}
-
 /** Every photograph a level uses, as file and whether it holds colour. */
 const FILES: [string, boolean][] = [
   ["grass.jpg", true],
@@ -95,9 +81,6 @@ const FILES: [string, boolean][] = [
   ["fir.webp", true],
   ["fir-n.webp", false],
 ];
-/** Pictures painted into crate and wall canvases. */
-const PICTURES = ["planks.jpg", "planks-paint.jpg", "wall.jpg"];
-
 /**
  * Loads every photograph the scenery uses. `step` is called once per file
  * as it arrives (or fails); resolves when all have settled.
@@ -112,18 +95,6 @@ export function preloadLand(step: () => void) {
           done();
         }),
       ),
-    );
-  for (const file of PICTURES)
-    jobs.push(
-      new Promise((done) => {
-        const finish = () => {
-          step();
-          done();
-        };
-        if (picture(file, finish)) finish();
-        else
-          images.get(file)?.addEventListener("error", finish, { once: true });
-      }),
     );
   return { count: jobs.length, all: Promise.all(jobs) };
 }
@@ -373,12 +344,13 @@ function treeMaterial(kind: number) {
           float cy = cos(vYaw); float sy = sin(vYaw);
           n = normalize(vec3(cy * n.x + sy * n.z, n.y, -sy * n.x + cy * n.z));
           // Leaves let some light through, so the sunlit side wraps round.
-          float lit = max((dot(n, sun) + 0.4) / 1.4, 0.0);
+          float lit = max((dot(n, sun) + 0.6) / 1.6, 0.0);
           vec3 leaf = c.rgb * mix(vec3(0.95, 1.12, 0.8), vec3(1.2, 1.25, 0.85), vShade) * 1.9;
-          vec3 light = vec3(1.0, 0.95, 0.86) * 1.3 * lit
-                     + vec3(0.24, 0.3, 0.4) * (0.5 + 0.5 * n.y);
+          // Skylight fills the shaded side, so no tree goes black.
+          vec3 light = vec3(1.0, 0.95, 0.86) * 1.15 * lit
+                     + vec3(0.42, 0.5, 0.6) * (0.7 + 0.3 * n.y);
           // Darker toward the foot, where the crown shades the trunk.
-          light *= mix(0.6, 1.0, smoothstep(0.05, 0.5, vUv.y));
+          light *= mix(0.75, 1.0, smoothstep(0.05, 0.5, vUv.y));
           gl_FragColor = vec4(leaf * light, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
