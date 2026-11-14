@@ -219,7 +219,21 @@ export const MAX_POWER = 4;
  * tiers each. Fire rate rises 10% a tier; power gives each shot a 15% chance
  * a tier of hitting twice as hard (a critical hit), so damage stays whole.
  */
-export type Perks = { power: number; rate: number };
+export type Perks = { power: number; rate: number; squad: number };
+export const NO_PERKS: Perks = { power: 0, rate: 0, squad: 0 };
+/** Extra soldiers each tier of the squad upgrade starts a level with. */
+export const SQUAD_PERK = [0, 3, 6, 10];
+/** How many soldiers a level starts with, given the upgrades owned. */
+export const startCount = (perks: Perks) =>
+  START_COUNT + (SQUAD_PERK[Math.min(perks.squad, SQUAD_PERK.length - 1)] ?? 0);
+/**
+ * Gives a world the player's upgrades. A level that hasn't started also
+ * gets its starting squad, so an upgrade bought on the start screen shows.
+ */
+export function applyPerks(w: World, perks: Perks) {
+  w.perks = { ...perks };
+  if (w.phase === "ready") w.count = w.best = startCount(perks);
+}
 export const RATE_PERK = 0.1;
 export const CRIT_PERK = 0.15;
 export const MAX_RAPID = 4;
@@ -587,7 +601,7 @@ export function newLevel(level: number): World {
     bullets: [],
     power: 1,
     rapid: 0,
-    perks: { power: 0, rate: 0 },
+    perks: { ...NO_PERKS },
     fireClock: 0,
     time: 0,
     shotsFired: 0,

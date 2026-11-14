@@ -2,10 +2,10 @@
 // in game.json's "shop" (dingn checks prices and asks the player to confirm);
 // this file says what the player owns and what to buy next.
 import type { DingnGame, ShopItem } from "../sdk/dingn-sdk.js";
-import type { Perks } from "./crowd-core";
+import { NO_PERKS, type Perks } from "./crowd-core";
 
 export type UpgradeKind = keyof Perks;
-export const UPGRADE_KINDS: UpgradeKind[] = ["power", "rate"];
+export const UPGRADE_KINDS: UpgradeKind[] = ["squad", "power", "rate"];
 export const TIERS = 3;
 /** What each tier costs, matching game.json. */
 export const PRICES = [50, 120, 250];
@@ -19,7 +19,7 @@ export function perksFrom(shop: ShopItem[]): Perks {
     while (n < TIERS && owned.has(upgradeId(kind, n + 1))) n++;
     return n;
   };
-  return { power: tiers("power"), rate: tiers("rate") };
+  return { power: tiers("power"), rate: tiers("rate"), squad: tiers("squad") };
 }
 
 /** The next tier to buy, or null when an upgrade is maxed out. */
@@ -36,11 +36,11 @@ type Shop = Pick<DingnGame, "player"> & {
 
 /** The player's upgrades; none when signed out or dingn can't say. */
 export async function loadPerks(sdk: Shop): Promise<Perks> {
-  if (!sdk.player.signedIn) return { power: 0, rate: 0 };
+  if (!sdk.player.signedIn) return { ...NO_PERKS };
   try {
     return perksFrom(await sdk.rewards.shop());
   } catch {
-    return { power: 0, rate: 0 };
+    return { ...NO_PERKS };
   }
 }
 
