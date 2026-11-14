@@ -894,3 +894,12 @@ export function defeated(w: World) {
 export const LOSS_COINS = 5;
 export const lossCoins = (w: World) =>
   Math.floor(defeated(w) * LOSS_COINS + 1e-9);
+
+/**
+ * dingn coins for a cleared level: 5, plus 1 for each star (6 to 8), so a
+ * win always pays more than a loss. Level badges pay on top, every 5 levels.
+ * dingn caps what a game pays for play at 30 coins a player each UTC day.
+ */
+export const WIN_COINS = 5;
+export const winCoins = (stars: number) =>
+  WIN_COINS + Math.max(0, Math.min(3, stars));

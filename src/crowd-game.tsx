@@ -16,6 +16,7 @@ import {
   RATE_PERK,
   defeated,
   lossCoins,
+  winCoins,
   newLevel,
   progress,
   stars,
@@ -121,6 +122,12 @@ export function CrowdGame() {
     coins: number | null;
     limit: boolean;
   }>({ share: 0, coins: null, limit: false });
+  // Coins a cleared level paid (null while asking, or signed out), and
+  // whether dingn's daily limit held some back.
+  const [prize, setPrize] = useState<{ coins: number | null; limit: boolean }>({
+    coins: null,
+    limit: false,
+  });
   const [sound, setSound] = useState(true);
   const [noGl, setNoGl] = useState(false);
   const [weapon, setWeapon] = useState({ power: 1, rapid: 0 });
@@ -363,6 +370,15 @@ export function CrowdGame() {
       }
       if (w.phase === "won") {
         setResult({ count: w.count, stars: stars(w) });
+        const coins = winCoins(stars(w));
+        setPrize({ coins: null, limit: false });
+        if (uidRef.current)
+          sdkRef.current.rewards
+            .earn(coins)
+            .then((paid) =>
+              setPrize({ coins: paid.coins, limit: paid.coins < coins }),
+            )
+            .catch((err) => console.warn("Crowd Rush coins", err));
         void badges.current?.cleared(sdkRef.current, w.level, stars(w));
         const saved = mergeProgress(localProgress(), {
           level: w.level + 1,
@@ -888,6 +904,28 @@ export function CrowdGame() {
             </p>
             <h2>{t("Boss down!")}</h2>
             <p>{t(`${result.count} of your squad made it.`)}</p>
+            {(prize.coins || prize.limit || !user) && (
+              <p className="crowd-loss">
+                {prize.coins != null && prize.coins > 0 && (
+                  <span className="crowd-loss-coins">
+                    <span className="crowd-coin" aria-hidden />
+                    {t(`+${prize.coins} coins`)}
+                  </span>
+                )}
+                {prize.limit && (
+                  <span className="crowd-loss-note">
+                    {t(
+                      "Daily coin limit reached. Come back tomorrow for more.",
+                    )}
+                  </span>
+                )}
+                {!user && (
+                  <span className="crowd-loss-note">
+                    {t("Sign in to earn coins for every level you clear.")}
+                  </span>
+                )}
+              </p>
+            )}
             {needsSignIn(level + 1, !!user) && (
               <p>
                 {t(

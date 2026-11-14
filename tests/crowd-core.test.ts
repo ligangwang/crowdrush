@@ -7,6 +7,8 @@ import {
   crowdRadius,
   defeated,
   lossCoins,
+  winCoins,
+  LOSS_COINS,
   newLevel,
   progress,
   RUN_SPEED,
@@ -436,4 +438,10 @@ test("a failed level pays a coin for every 20% of the enemies destroyed", () => 
   assert.equal(defeated(w), 0.75);
   w.boss.hp = 0;
   assert.equal(lossCoins(w), 5);
+});
+
+test("a cleared level pays 5 coins plus 1 a star, more than any loss", () => {
+  assert.equal(winCoins(1), 6);
+  assert.equal(winCoins(3), 8);
+  assert.ok(winCoins(0) > LOSS_COINS - 1);
 });
