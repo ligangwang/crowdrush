@@ -14,6 +14,7 @@ import {
   firepower,
   volley,
   MAX_COUNT,
+  countLabel,
   MAX_COIN_PACKS,
   MIN_COIN_PACKS,
   MAX_PACK_COINS,
@@ -112,7 +113,10 @@ test("gate maths never goes below zero or above the cap", () => {
   assert.equal(applyOp(10, { op: "-", n: 50 }), 0);
   assert.equal(applyOp(10, { op: "x", n: 3 }), 30);
   assert.equal(applyOp(9, { op: "/", n: 2 }), 4);
-  assert.equal(applyOp(600, { op: "x", n: 2 }), 999);
+  // past 999 the squad keeps growing, up to a far-off sanity cap
+  assert.equal(applyOp(600, { op: "x", n: 2 }), 1200);
+  assert.equal(applyOp(MAX_COUNT, { op: "x", n: 3 }), MAX_COUNT);
+  assert.deepEqual([950, 4800, 12345].map(countLabel), ["950", "4,800", "12k"]);
 });
 
 test("a sensible player clears the opening levels and most of the first twenty", () => {
