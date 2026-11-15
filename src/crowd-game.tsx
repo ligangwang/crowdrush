@@ -863,10 +863,10 @@ export function CrowdGame() {
                 )}
               >
                 {weapon.power > 1 && (
-                  <b className="power">DMG ×{weapon.power}</b>
+                  <b className="power">{t(`DMG ×${weapon.power}`)}</b>
                 )}
                 {weapon.rapid > 0 && (
-                  <b className="rate">RATE +{weapon.rapid}</b>
+                  <b className="rate">{t(`RATE +${weapon.rapid}`)}</b>
                 )}
               </span>
             )}
