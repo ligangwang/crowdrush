@@ -29,6 +29,11 @@ import {
   steer,
   step,
   type World,
+  applyPerks,
+  retryEase,
+  tiersAt,
+  WALL_HIT,
+  type Perks,
 } from "../src/crowd-core";
 
 /** A simple player: take the better gate, dodge walls, shoot what it can break. */
@@ -70,8 +75,9 @@ function autopilot(w: World) {
   }
   return steer(w, ahead.kind === "squad" ? ahead.x : 0);
 }
-function play(level: number, pilot: (w: World) => void) {
-  const w = newLevel(level);
+function play(level: number, pilot: (w: World) => void, perks?: Perks) {
+  const w = newLevel(level, perks);
+  if (perks) applyPerks(w, perks);
   start(w);
   for (
     let i = 0;
@@ -551,4 +557,44 @@ test("past the fire-rate cap a bigger squad's rounds hit harder", () => {
       }
   }
   assert.ok(Math.abs(dealt / shots - heavyRounds(999)) < 0.15);
+});
+
+test("with every upgrade unlocked so far, a sensible player clears nearly every level", () => {
+  let wins = 0;
+  let played = 0;
+  for (let lv = 1; lv <= 57; lv += 4) {
+    const k = tiersAt(lv);
+    const w = play(lv, autopilot, { power: k, rate: k, squad: k });
+    played++;
+    if (w.phase === "won") wins++;
+  }
+  assert.ok(wins >= played - 1, `won ${wins} of ${played}`);
+});
+
+test("a wall costs soldiers but never wipes out the squad on its own", () => {
+  const w = newLevel(100);
+  w.things = [
+    {
+      kind: "block",
+      id: 1,
+      z: 2,
+      x: 0,
+      w: 0.27,
+      hp: 700,
+      maxHp: 700,
+      reward: 0,
+      dead: false,
+    },
+  ];
+  w.count = w.best = 200;
+  start(w);
+  for (let i = 0; i < 60 && w.phase === "run"; i++) step(w, 1 / 60);
+  assert.equal(w.count, 200 - Math.ceil(200 * WALL_HIT));
+});
+
+test("each failed try of the same level eases it, up to half", () => {
+  const boss = (tries: number) => newLevel(40, undefined, tries).boss.maxHp;
+  assert.ok(boss(1) < boss(0) && boss(3) < boss(1));
+  assert.equal(boss(5), boss(9));
+  assert.equal(retryEase(9), 0.5);
 });

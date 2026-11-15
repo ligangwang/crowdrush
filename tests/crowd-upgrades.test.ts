@@ -8,7 +8,9 @@ import {
 } from "../src/crowd-upgrades";
 import {
   applyPerks,
-  CRIT_PERK,
+  critChance,
+  MAX_TIER,
+  TIER_UNLOCK,
   newLevel,
   shotRate,
   start,
@@ -37,18 +39,20 @@ test("owned tiers count in order, and the next tier is offered", () => {
     id: "power-3",
     tier: 3,
     price: 250,
+    unlocks: null,
   });
   assert.deepEqual(nextUpgrade("rate", perks), {
     id: "rate-1",
     tier: 1,
     price: 50,
+    unlocks: null,
   });
-  assert.equal(nextUpgrade("power", { power: 3, rate: 0, squad: 0 }), null);
+  assert.equal(nextUpgrade("power", { power: 10, rate: 0, squad: 0 }), null);
 });
 
 test("prices and tiers match game.json's shop", () => {
   for (const kind of ["squad", "power", "rate"] as const)
-    for (let tier = 1; tier <= 3; tier++) {
+    for (let tier = 1; tier <= MAX_TIER; tier++) {
       const next = nextUpgrade(kind, {
         power: tier - 1,
         rate: tier - 1,
@@ -122,7 +126,7 @@ test("upgrades fire faster and land critical hits", () => {
       }
   }
   const share = crits / shots;
-  assert.ok(Math.abs(share - CRIT_PERK * 3) < 0.12, `${crits}/${shots}`);
+  assert.ok(Math.abs(share - critChance(3)) < 0.12, `${crits}/${shots}`);
 });
 
 test("the squad upgrade starts each level with more soldiers", () => {
@@ -145,7 +149,7 @@ test("the squad upgrade starts each level with more soldiers", () => {
   assert.equal(w.count, 30);
 });
 
-test("levels are sized for most of the upgrades the player owns", () => {
+test("levels are partly sized for the upgrades the player owns", () => {
   const max = { power: 3, rate: 3, squad: 3 };
   for (const lv of [2, 12, 30]) {
     const plain = newLevel(lv);
@@ -157,7 +161,21 @@ test("levels are sized for most of the upgrades the player owns", () => {
     const hp = (w: typeof plain) =>
       w.things.reduce((s, t) => s + (t.kind === "monster" ? t.maxHp : 0), 0);
     assert.ok(hp(upgraded) > hp(plain), `monsters on level ${lv}`);
-    assert.ok(upgraded.boss.maxHp > plain.boss.maxHp * 1.2, `boss on ${lv}`);
+    assert.ok(upgraded.boss.maxHp > plain.boss.maxHp, `boss on ${lv}`);
     assert.deepEqual(upgraded.perks, max);
   }
+});
+
+test("tiers past the third unlock as the player goes deeper", () => {
+  const owned = { power: 3, rate: 3, squad: 3 };
+  assert.equal(nextUpgrade("power", owned, 19)!.unlocks, 20);
+  assert.equal(nextUpgrade("power", owned, 20)!.unlocks, null);
+  assert.equal(nextUpgrade("rate", { ...owned, rate: 9 }, 109)!.unlocks, 110);
+  assert.equal(TIER_UNLOCK.length, MAX_TIER);
+  // every price fits dingn's limit, and the shop fits its 30 items
+  assert.ok(game.shop.length <= 30);
+  for (const item of game.shop)
+    assert.ok(item.price >= 1 && item.price <= 1000);
+  // critical hits reach every shot at the top tier, never more
+  assert.equal(critChance(MAX_TIER), 1);
 });

@@ -238,14 +238,28 @@ export const heavyRounds = (count: number) =>
 export const squadDps = (count: number) => fireRate(count) * heavyRounds(count);
 export const MAX_POWER = 4;
 /**
- * Permanent upgrades bought with dingn coins (crowd-upgrades.ts), up to 3
- * tiers each. Fire rate rises 10% a tier; power gives each shot a 15% chance
- * a tier of hitting twice as hard (a critical hit), so damage stays whole.
+ * Permanent upgrades bought with dingn coins (crowd-upgrades.ts), up to
+ * MAX_TIER tiers each; tiers past the third unlock as the player reaches
+ * deeper levels (TIER_UNLOCK). Fire rate rises 10% a tier; power gives each
+ * shot a chance (CRIT_CHANCE) of hitting twice as hard (a critical hit), so
+ * damage stays whole.
  */
 export type Perks = { power: number; rate: number; squad: number };
 export const NO_PERKS: Perks = { power: 0, rate: 0, squad: 0 };
 /** Extra soldiers each tier of the squad upgrade starts a level with. */
-export const SQUAD_PERK = [0, 3, 6, 10];
+export const SQUAD_PERK = [0, 3, 6, 10, 14, 19, 25, 31, 37, 43, 49];
+export const MAX_TIER = SQUAD_PERK.length - 1;
+/** The level each tier (1 to MAX_TIER) unlocks at: one more every 15. */
+export const TIER_UNLOCK = [1, 1, 1, 20, 35, 50, 65, 80, 95, 110];
+/** The highest tier the player may own on this level. */
+export const tiersAt = (level: number) =>
+  TIER_UNLOCK.filter((lv) => lv <= level).length;
+/** Chance of a critical hit at each power tier: 15% a tier, then 100% by 10. */
+export const CRIT_CHANCE = [
+  0, 0.15, 0.3, 0.45, 0.53, 0.61, 0.69, 0.76, 0.84, 0.92, 1,
+];
+export const critChance = (power: number) =>
+  CRIT_CHANCE[Math.max(0, Math.min(power, MAX_TIER))];
 /** How many soldiers a level starts with, given the upgrades owned. */
 export const startCount = (perks: Perks) =>
   START_COUNT + (SQUAD_PERK[Math.min(perks.squad, SQUAD_PERK.length - 1)] ?? 0);
@@ -258,14 +272,21 @@ export function applyPerks(w: World, perks: Perks) {
   if (w.phase === "ready") w.count = w.best = startCount(perks);
 }
 export const RATE_PERK = 0.1;
-/** Share of the upgrades' advantage that levels are sized for. */
-export const PERK_PRICED = 0.7;
+/** Share of the upgrades' advantage that levels are sized for (40%). */
+export const PERK_PRICED = 0.4;
 /** How much weaker monsters and the boss are on level 1 (fading by 11). */
 export const BEGINNER_EASE = 0.15;
 /** Extra toughness for every monster, and for the boss, at every level. */
 export const MONSTER_TOUGHNESS = 1.25;
 export const BOSS_TOUGHNESS = 1.2;
-export const CRIT_PERK = 0.15;
+/** The most of the squad that running into one wall can cost. */
+export const WALL_HIT = 0.4;
+/**
+ * How much weaker monsters and the boss are after failing the same level
+ * `tries` times in a row: 10% a try, up to 50% from the fifth.
+ */
+export const retryEase = (tries: number) =>
+  Math.min(0.5, 0.1 * Math.max(0, tries));
 export const MAX_RAPID = 4;
 /**
  * How a squad's gunfire looks, from 0 (one soldier) to 1 (a thousand). The
@@ -298,16 +319,21 @@ export function shotRate(
  * reasonable player will have at each point, so every level is winnable by
  * picking the better gate and shooting what is in front of you.
  */
-export function newLevel(level: number, perks: Perks = NO_PERKS): World {
+export function newLevel(
+  level: number,
+  perks: Perks = NO_PERKS,
+  tries = 0,
+): World {
   const lv = Math.max(1, Math.floor(level));
-  // Upgrades are priced in, so a level is about as hard with them as
-  // without: the level expects most (PERK_PRICED) of the extra soldiers and
-  // damage they give, and the rest is the player's safety margin.
+  // Upgrades are partly priced in: the level expects a share (PERK_PRICED)
+  // of the extra soldiers and damage they give, so they don't make it a
+  // walkover, and the rest is the player's edge. With every tier unlocked
+  // so far, a sensible player clears nearly every level.
   const extraSquad = startCount(perks) - START_COUNT;
   const perkDamage =
     1 +
     PERK_PRICED *
-      ((1 + RATE_PERK * perks.rate) * (1 + CRIT_PERK * perks.power) - 1);
+      ((1 + RATE_PERK * perks.rate) * (1 + critChance(perks.power)) - 1);
   const random = rng(lv * 7919 + 17);
   const pick = <T>(items: T[]) => items[Math.floor(random() * items.length)];
   const int = (lo: number, hi: number) =>
@@ -619,7 +645,10 @@ export function newLevel(level: number, perks: Perks = NO_PERKS): World {
   // and the boss are weaker and the boss is slower, by BEGINNER_EASE (15%) on level 1,
   // fading out level by level until it is gone from level 11 on. The track
   // itself (gates, crates and walls) is the same.
-  const soften = 1 - BEGINNER_EASE * (Math.max(0, 11 - lv) / 10);
+  // A level failed again and again eases off too (retryEase), so nobody
+  // is stuck on one level for good.
+  const soften =
+    (1 - BEGINNER_EASE * (Math.max(0, 11 - lv) / 10)) * (1 - retryEase(tries));
   for (const t of things)
     if (t.kind === "monster") {
       t.hp = t.maxHp = Math.max(
@@ -862,7 +891,7 @@ export function step(w: World, dt: number) {
       // an upgraded weapon sometimes lands a critical hit
       dmg: roundDamage(
         w,
-        (w.perks.power > 0 && w.random() < CRIT_PERK * w.perks.power
+        (w.perks.power > 0 && w.random() < critChance(w.perks.power)
           ? w.power * 2
           : w.power) * heavyRounds(w.count),
       ),
@@ -985,7 +1014,12 @@ export function step(w: World, dt: number) {
     if (t.kind === "block") {
       if (t.upgrade) continue;
       if (Math.abs(t.x - w.x) < t.w + rr * 0.8) {
-        const lost = Math.min(w.count, Math.ceil(t.hp / 2));
+        // a wall costs soldiers, but never more than WALL_HIT of the squad,
+        // so clipping one deep in the game hurts without ending the run
+        const lost = Math.min(
+          Math.ceil(t.hp / 2),
+          Math.max(1, Math.ceil(w.count * WALL_HIT)),
+        );
         w.count -= lost;
         t.dead = true;
         w.events.push({ type: "wall", x: t.x, z: t.z, lost });
