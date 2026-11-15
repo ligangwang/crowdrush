@@ -258,6 +258,8 @@ export function applyPerks(w: World, perks: Perks) {
   if (w.phase === "ready") w.count = w.best = startCount(perks);
 }
 export const RATE_PERK = 0.1;
+/** Share of the upgrades' advantage that levels are sized for. */
+export const PERK_PRICED = 0.7;
 export const CRIT_PERK = 0.15;
 export const MAX_RAPID = 4;
 /**
@@ -291,8 +293,16 @@ export function shotRate(
  * reasonable player will have at each point, so every level is winnable by
  * picking the better gate and shooting what is in front of you.
  */
-export function newLevel(level: number): World {
+export function newLevel(level: number, perks: Perks = NO_PERKS): World {
   const lv = Math.max(1, Math.floor(level));
+  // Upgrades are priced in, so a level is about as hard with them as
+  // without: the level expects most (PERK_PRICED) of the extra soldiers and
+  // damage they give, and the rest is the player's safety margin.
+  const extraSquad = startCount(perks) - START_COUNT;
+  const perkDamage =
+    1 +
+    PERK_PRICED *
+      ((1 + RATE_PERK * perks.rate) * (1 + CRIT_PERK * perks.power) - 1);
   const random = rng(lv * 7919 + 17);
   const pick = <T>(items: T[]) => items[Math.floor(random() * items.length)];
   const int = (lo: number, hi: number) =>
@@ -302,16 +312,16 @@ export function newLevel(level: number): World {
   const sections = 8 + Math.min(lv, 10);
   const things: Thing[] = [];
   let z = 34;
-  let expected = START_COUNT;
+  let expected = START_COUNT + Math.round(extraSquad * PERK_PRICED);
   let id = 0;
   let lastKind = "";
   // weapon crates use their own random stream so the rest stays the same
   const upRoll = rng(lv * 31337 + 5);
   let ups = 0;
   /** Expected damage multiplier from the weapon crates collected so far. */
-  let gun = 1;
+  let gun = perkDamage;
   const gunFor = (n: number) =>
-    (1 + Math.floor(n / 2)) * (1 + 0.35 * Math.ceil(n / 2));
+    (1 + Math.floor(n / 2)) * (1 + 0.35 * Math.ceil(n / 2)) * perkDamage;
   /** Rough squad size along the track, used to size the monsters. */
   const checkpoints: { z: number; expected: number; gun: number }[] = [];
   for (let i = 0; i < sections; i++) {
@@ -396,7 +406,9 @@ export function newLevel(level: number): World {
       expected = applyOp(expected, good);
       // after each gate, a weapon crate on one side lane: rate, power, ...
       if (i > 0 && ups < 2 + Math.min(3, Math.floor(lv / 3))) {
-        const hp = Math.round(squadDps(expected) * 0.7) + Math.floor(lv / 6);
+        const hp =
+          Math.round(squadDps(expected) * perkDamage * 0.7) +
+          Math.floor(lv / 6);
         things.push({
           kind: "block",
           id: id++,
@@ -493,7 +505,7 @@ export function newLevel(level: number): World {
   while (mz < length - BOSS_STOP - 6) {
     const near = [...checkpoints].reverse().find((c) => c.z <= mz);
     const size = Math.max(1, near?.expected ?? START_COUNT);
-    const g = near?.gun ?? 1;
+    const g = near?.gun ?? perkDamage;
     const dps = squadDps(size) * g;
     // the gap that keeps this group's hit points within the pressure budget
     const gap = (hp: number, closing: number) =>
@@ -609,9 +621,11 @@ export function newLevel(level: number): World {
       t.bite = Math.max(1, Math.round(t.bite * soften));
     }
 
-  // seconds of full fire the boss soaks up, assuming every weapon crate
+  // seconds of full fire the boss soaks up, assuming every weapon crate;
+  // from level 21 the boss grows tougher still, up to half again at 54
+  const late = 1 + Math.min(0.5, 0.015 * Math.max(0, lv - 20));
   const bossHp = Math.round(
-    squadDps(expected) * gun ** 0.9 * (5 + 2 * Math.sqrt(hard)) * soften,
+    squadDps(expected) * gun ** 0.9 * (5 + 2 * Math.sqrt(hard)) * late * soften,
   );
   return {
     level: lv,
@@ -639,7 +653,7 @@ export function newLevel(level: number): World {
     bullets: [],
     power: 1,
     rapid: 0,
-    perks: { ...NO_PERKS },
+    perks: { ...perks },
     fireClock: 0,
     time: 0,
     shotsFired: 0,

@@ -186,10 +186,19 @@ export function CrowdGame() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sdk.player.signedIn]);
-  // A level waiting to start picks up an upgrade bought just now.
+  // A level waiting to start is rebuilt for an upgrade bought (or loaded)
+  // just now, since levels are sized for the upgrades the player owns.
   useEffect(() => {
     const w = world.current;
-    if (w.phase === "ready") applyPerks(w, perks);
+    if (w.phase !== "ready") return;
+    const p = w.perks;
+    if (
+      p.power !== perks.power ||
+      p.rate !== perks.rate ||
+      p.squad !== perks.squad
+    )
+      load(w.level);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perks]);
   async function buy(kind: UpgradeKind) {
     const next = nextUpgrade(kind, perksRef.current);
@@ -215,7 +224,7 @@ export function CrowdGame() {
         : t("Fire rate");
 
   function load(lv: number) {
-    world.current = newLevel(lv);
+    world.current = newLevel(lv, perksRef.current);
     applyPerks(world.current, perksRef.current);
     const f = fx.current;
     f.sparks = [];
@@ -268,7 +277,7 @@ export function CrowdGame() {
     setSound(s);
     sfx.current = new Sfx();
     sfx.current.on = s;
-    world.current = newLevel(saved);
+    world.current = newLevel(saved, perksRef.current);
     applyPerks(world.current, perksRef.current);
     setLevel(saved);
     if (import.meta.env.DEV)

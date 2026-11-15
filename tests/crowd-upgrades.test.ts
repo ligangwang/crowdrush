@@ -144,3 +144,20 @@ test("the squad upgrade starts each level with more soldiers", () => {
   applyPerks(w, { power: 0, rate: 0, squad: 1 });
   assert.equal(w.count, 30);
 });
+
+test("levels are sized for most of the upgrades the player owns", () => {
+  const max = { power: 3, rate: 3, squad: 3 };
+  for (const lv of [2, 12, 30]) {
+    const plain = newLevel(lv);
+    const upgraded = newLevel(lv, max);
+    // same track (gates, crates, walls), tougher enemies and boss
+    const track = (w: typeof plain) =>
+      w.things.filter((t) => t.kind !== "monster").map((t) => t.z);
+    assert.deepEqual(track(upgraded), track(plain));
+    const hp = (w: typeof plain) =>
+      w.things.reduce((s, t) => s + (t.kind === "monster" ? t.maxHp : 0), 0);
+    assert.ok(hp(upgraded) > hp(plain), `monsters on level ${lv}`);
+    assert.ok(upgraded.boss.maxHp > plain.boss.maxHp * 1.2, `boss on ${lv}`);
+    assert.deepEqual(upgraded.perks, max);
+  }
+});
