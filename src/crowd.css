@@ -372,6 +372,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
   font-weight: 700;
   font-size: 0.92rem;
 }
@@ -390,10 +391,10 @@
 }
 .crowd-shop-tiers {
   display: inline-flex;
-  gap: 3px;
+  gap: 2px;
 }
 .crowd-shop-tiers i {
-  width: 12px;
+  width: 5px;
   height: 4px;
   border-radius: 2px;
   background: #ffffff33;
@@ -474,6 +475,20 @@
   font-size: 0.8rem;
   font-weight: 700;
   color: #ffd25e;
+}
+.crowd-retry-ease {
+  margin: -4px 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #9be7a0;
+}
+.crowd-shop-locked {
+  max-width: 96px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #ffffff99;
 }
 .crowd-shop-note {
   margin: 0;

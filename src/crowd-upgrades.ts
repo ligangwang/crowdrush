@@ -2,13 +2,13 @@
 // in game.json's "shop" (dingn checks prices and asks the player to confirm);
 // this file says what the player owns and what to buy next.
 import type { DingnGame, ShopItem } from "../sdk/dingn-sdk.js";
-import { NO_PERKS, type Perks } from "./crowd-core";
+import { MAX_TIER, NO_PERKS, TIER_UNLOCK, type Perks } from "./crowd-core";
 
 export type UpgradeKind = keyof Perks;
 export const UPGRADE_KINDS: UpgradeKind[] = ["squad", "power", "rate"];
-export const TIERS = 3;
-/** What each tier costs, matching game.json. */
-export const PRICES = [50, 120, 250];
+export const TIERS = MAX_TIER;
+/** What each tier costs, matching game.json (dingn caps a price at 1,000). */
+export const PRICES = [50, 120, 250, 400, 500, 600, 700, 800, 900, 1000];
 export const upgradeId = (kind: UpgradeKind, tier: number) => `${kind}-${tier}`;
 
 /** The tiers owned of each upgrade, from dingn's list of the shop. */
@@ -22,12 +22,20 @@ export function perksFrom(shop: ShopItem[]): Perks {
   return { power: tiers("power"), rate: tiers("rate"), squad: tiers("squad") };
 }
 
-/** The next tier to buy, or null when an upgrade is maxed out. */
-export function nextUpgrade(kind: UpgradeKind, perks: Perks) {
+/**
+ * The next tier to buy, or null when an upgrade is maxed out. A tier the
+ * player hasn't reached the level for yet says where it unlocks (`unlocks`).
+ */
+export function nextUpgrade(kind: UpgradeKind, perks: Perks, level = 1) {
   const tier = perks[kind] + 1;
-  return tier > TIERS
-    ? null
-    : { id: upgradeId(kind, tier), tier, price: PRICES[tier - 1] };
+  if (tier > TIERS) return null;
+  const at = TIER_UNLOCK[tier - 1];
+  return {
+    id: upgradeId(kind, tier),
+    tier,
+    price: PRICES[tier - 1],
+    unlocks: at > level ? at : null,
+  };
 }
 
 type Shop = Pick<DingnGame, "player"> & {

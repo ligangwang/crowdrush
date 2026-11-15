@@ -12,7 +12,8 @@ import {
   type CrowdProgress,
 } from "./crowd-progress";
 import {
-  CRIT_PERK,
+  critChance,
+  retryEase,
   RATE_PERK,
   defeated,
   levelCoins,
@@ -169,6 +170,9 @@ export function CrowdGame() {
   // Upgrades bought with dingn coins; every level starts with them.
   const [perks, setPerks] = useState<Perks>({ ...NO_PERKS });
   const perksRef = useRef(perks);
+  // Levels failed in a row; each retry of the same level eases it off.
+  const triesRef = useRef({ level: 0, n: 0 });
+  const [tries, setTries] = useState(0);
   perksRef.current = perks;
   const [buying, setBuying] = useState<UpgradeKind | null>(null);
   const [shopNote, setShopNote] = useState("");
@@ -201,8 +205,8 @@ export function CrowdGame() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perks]);
   async function buy(kind: UpgradeKind) {
-    const next = nextUpgrade(kind, perksRef.current);
-    if (!next || buying) return;
+    const next = nextUpgrade(kind, perksRef.current, world.current.level);
+    if (!next || next.unlocks || buying) return;
     if (!uidRef.current) return sdk.requestSignIn();
     setBuying(kind);
     setShopNote("");
@@ -224,7 +228,9 @@ export function CrowdGame() {
         : t("Fire rate");
 
   function load(lv: number) {
-    world.current = newLevel(lv, perksRef.current);
+    const tries = triesRef.current.level === lv ? triesRef.current.n : 0;
+    setTries(tries);
+    world.current = newLevel(lv, perksRef.current, tries);
     applyPerks(world.current, perksRef.current);
     const f = fx.current;
     f.sparks = [];
@@ -420,6 +426,11 @@ export function CrowdGame() {
     if (was !== w.phase) {
       setPhase(w.phase);
       if (w.phase === "lost") {
+        const tr = triesRef.current;
+        triesRef.current = {
+          level: w.level,
+          n: tr.level === w.level ? tr.n + 1 : 1,
+        };
         const coins = levelCoins(w);
         setLoss({ share: defeated(w), coins: null, limit: false });
         if (coins > 0 && uidRef.current && !cappedRef.current)
@@ -431,6 +442,7 @@ export function CrowdGame() {
             .catch((err) => console.warn("Crowd Rush coins", err));
       }
       if (w.phase === "won") {
+        triesRef.current = { level: 0, n: 0 };
         setResult({ count: w.count, stars: stars(w) });
         const coins = levelCoins(w);
         setPrize({ coins: null, limit: false });
@@ -968,6 +980,13 @@ export function CrowdGame() {
           <div className="crowd-overlay">
             <p className="eyebrow">{t(`Level ${level}`)}</p>
             <h2>{t("Ready to rush?")}</h2>
+            {tries > 0 && (
+              <p className="crowd-retry-ease">
+                {t(
+                  `Try ${tries + 1}: enemies ${Math.round(retryEase(tries) * 100)}% weaker`,
+                )}
+              </p>
+            )}
             <button type="button" className="button" onClick={begin}>
               {t("Start")}
             </button>
@@ -983,10 +1002,14 @@ export function CrowdGame() {
                 </span>
               </p>
               {UPGRADE_KINDS.map((kind) => {
-                const next = nextUpgrade(kind, perks);
+                const next = nextUpgrade(kind, perks, level);
+                const locked = next?.unlocks ?? null;
                 const name = upgradeName(kind);
-                const per = kind === "power" ? CRIT_PERK : RATE_PERK;
-                const pct = (tier: number) => Math.round(per * tier * 100);
+                const pct = (tier: number) =>
+                  Math.round(
+                    (kind === "power" ? critChance(tier) : RATE_PERK * tier) *
+                      100,
+                  );
                 const label =
                   kind === "squad"
                     ? t("Soldiers at the start")
@@ -1002,9 +1025,9 @@ export function CrowdGame() {
                 return (
                   <div
                     key={kind}
-                    className={`crowd-shop-row${next ? " can-buy" : ""}`}
+                    className={`crowd-shop-row${next && !locked ? " can-buy" : ""}`}
                     // the whole row upgrades too; the button is for keyboards
-                    onClick={() => next && void buy(kind)}
+                    onClick={() => next && !locked && void buy(kind)}
                   >
                     <span className={`crowd-shop-icon ${kind}`} aria-hidden />
                     <span className="crowd-shop-info">
@@ -1039,7 +1062,12 @@ export function CrowdGame() {
                         )}
                       </span>
                     </span>
-                    {next ? (
+                    {locked ? (
+                      <span className="crowd-shop-locked">
+                        <span aria-hidden>🔒</span>{" "}
+                        {t(`Unlocks at level ${locked}`)}
+                      </span>
+                    ) : next ? (
                       <button
                         type="button"
                         className={`crowd-shop-buy${poor?.kind === kind ? " poor" : ""}`}

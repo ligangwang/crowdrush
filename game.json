@@ -1,6 +1,6 @@
 {
   "id": "crowdrush",
-  "version": "1.5.8",
+  "version": "1.6.0",
   "title": {
     "en": "Crowd Rush",
     "zh": "人潮突击"
@@ -238,6 +238,69 @@
       "requires": "squad-2"
     },
     {
+      "id": "squad-4",
+      "price": 400,
+      "title": {
+        "en": "Squad +4",
+        "zh": "兵力 +4"
+      },
+      "requires": "squad-3"
+    },
+    {
+      "id": "squad-5",
+      "price": 500,
+      "title": {
+        "en": "Squad +5",
+        "zh": "兵力 +5"
+      },
+      "requires": "squad-4"
+    },
+    {
+      "id": "squad-6",
+      "price": 600,
+      "title": {
+        "en": "Squad +6",
+        "zh": "兵力 +6"
+      },
+      "requires": "squad-5"
+    },
+    {
+      "id": "squad-7",
+      "price": 700,
+      "title": {
+        "en": "Squad +7",
+        "zh": "兵力 +7"
+      },
+      "requires": "squad-6"
+    },
+    {
+      "id": "squad-8",
+      "price": 800,
+      "title": {
+        "en": "Squad +8",
+        "zh": "兵力 +8"
+      },
+      "requires": "squad-7"
+    },
+    {
+      "id": "squad-9",
+      "price": 900,
+      "title": {
+        "en": "Squad +9",
+        "zh": "兵力 +9"
+      },
+      "requires": "squad-8"
+    },
+    {
+      "id": "squad-10",
+      "price": 1000,
+      "title": {
+        "en": "Squad +10",
+        "zh": "兵力 +10"
+      },
+      "requires": "squad-9"
+    },
+    {
       "id": "power-1",
       "price": 50,
       "title": {
@@ -264,6 +327,69 @@
       "requires": "power-2"
     },
     {
+      "id": "power-4",
+      "price": 400,
+      "title": {
+        "en": "Power +4",
+        "zh": "火力 +4"
+      },
+      "requires": "power-3"
+    },
+    {
+      "id": "power-5",
+      "price": 500,
+      "title": {
+        "en": "Power +5",
+        "zh": "火力 +5"
+      },
+      "requires": "power-4"
+    },
+    {
+      "id": "power-6",
+      "price": 600,
+      "title": {
+        "en": "Power +6",
+        "zh": "火力 +6"
+      },
+      "requires": "power-5"
+    },
+    {
+      "id": "power-7",
+      "price": 700,
+      "title": {
+        "en": "Power +7",
+        "zh": "火力 +7"
+      },
+      "requires": "power-6"
+    },
+    {
+      "id": "power-8",
+      "price": 800,
+      "title": {
+        "en": "Power +8",
+        "zh": "火力 +8"
+      },
+      "requires": "power-7"
+    },
+    {
+      "id": "power-9",
+      "price": 900,
+      "title": {
+        "en": "Power +9",
+        "zh": "火力 +9"
+      },
+      "requires": "power-8"
+    },
+    {
+      "id": "power-10",
+      "price": 1000,
+      "title": {
+        "en": "Power +10",
+        "zh": "火力 +10"
+      },
+      "requires": "power-9"
+    },
+    {
       "id": "rate-1",
       "price": 50,
       "title": {
@@ -288,6 +414,69 @@
         "zh": "射速 +3"
       },
       "requires": "rate-2"
+    },
+    {
+      "id": "rate-4",
+      "price": 400,
+      "title": {
+        "en": "Fire rate +4",
+        "zh": "射速 +4"
+      },
+      "requires": "rate-3"
+    },
+    {
+      "id": "rate-5",
+      "price": 500,
+      "title": {
+        "en": "Fire rate +5",
+        "zh": "射速 +5"
+      },
+      "requires": "rate-4"
+    },
+    {
+      "id": "rate-6",
+      "price": 600,
+      "title": {
+        "en": "Fire rate +6",
+        "zh": "射速 +6"
+      },
+      "requires": "rate-5"
+    },
+    {
+      "id": "rate-7",
+      "price": 700,
+      "title": {
+        "en": "Fire rate +7",
+        "zh": "射速 +7"
+      },
+      "requires": "rate-6"
+    },
+    {
+      "id": "rate-8",
+      "price": 800,
+      "title": {
+        "en": "Fire rate +8",
+        "zh": "射速 +8"
+      },
+      "requires": "rate-7"
+    },
+    {
+      "id": "rate-9",
+      "price": 900,
+      "title": {
+        "en": "Fire rate +9",
+        "zh": "射速 +9"
+      },
+      "requires": "rate-8"
+    },
+    {
+      "id": "rate-10",
+      "price": 1000,
+      "title": {
+        "en": "Fire rate +10",
+        "zh": "射速 +10"
+      },
+      "requires": "rate-9"
     }
   ]
 }
