@@ -260,6 +260,11 @@ export function applyPerks(w: World, perks: Perks) {
 export const RATE_PERK = 0.1;
 /** Share of the upgrades' advantage that levels are sized for. */
 export const PERK_PRICED = 0.7;
+/** How much weaker monsters and the boss are on level 1 (fading by 11). */
+export const BEGINNER_EASE = 0.15;
+/** Extra toughness for every monster, and for the boss, at every level. */
+export const MONSTER_TOUGHNESS = 1.25;
+export const BOSS_TOUGHNESS = 1.2;
 export const CRIT_PERK = 0.15;
 export const MAX_RAPID = 4;
 /**
@@ -500,7 +505,7 @@ export function newLevel(level: number, perks: Perks = NO_PERKS): World {
   // Monsters arrive faster at higher levels: the share of the squad's
   // firepower needed to hold them off keeps climbing, with no cap on the
   // level (it only levels off near the point where nothing could keep up).
-  const pressure = 0.5 + 0.45 * (1 - 1 / (1 + hard / 12));
+  const pressure = 0.58 + 0.4 * (1 - 1 / (1 + hard / 12));
   let mz = firstGate + 10;
   while (mz < length - BOSS_STOP - 6) {
     const near = [...checkpoints].reverse().find((c) => c.z <= mz);
@@ -611,13 +616,16 @@ export function newLevel(level: number, perks: Perks = NO_PERKS): World {
   id += coins.length;
 
   // Levels 1 to 10 are eased in so new players find their feet: monsters
-  // and the boss are weaker and the boss is slower, by 30% on level 1,
+  // and the boss are weaker and the boss is slower, by BEGINNER_EASE (15%) on level 1,
   // fading out level by level until it is gone from level 11 on. The track
   // itself (gates, crates and walls) is the same.
-  const soften = 1 - 0.3 * (Math.max(0, 11 - lv) / 10);
+  const soften = 1 - BEGINNER_EASE * (Math.max(0, 11 - lv) / 10);
   for (const t of things)
     if (t.kind === "monster") {
-      t.hp = t.maxHp = Math.max(1, Math.round(t.maxHp * soften));
+      t.hp = t.maxHp = Math.max(
+        1,
+        Math.round(t.maxHp * soften * MONSTER_TOUGHNESS),
+      );
       t.bite = Math.max(1, Math.round(t.bite * soften));
     }
 
@@ -625,7 +633,12 @@ export function newLevel(level: number, perks: Perks = NO_PERKS): World {
   // from level 21 the boss grows tougher still, up to half again at 54
   const late = 1 + Math.min(0.5, 0.015 * Math.max(0, lv - 20));
   const bossHp = Math.round(
-    squadDps(expected) * gun ** 0.9 * (5 + 2 * Math.sqrt(hard)) * late * soften,
+    squadDps(expected) *
+      gun ** 0.9 *
+      (5 + 2 * Math.sqrt(hard)) *
+      late *
+      soften *
+      BOSS_TOUGHNESS,
   );
   return {
     level: lv,
@@ -698,7 +711,7 @@ function placeCoins(
     MIN_COIN_PACKS + Math.floor(roll() * (MAX_COIN_PACKS - MIN_COIN_PACKS + 1));
   const span = (length - BOSS_STOP - 30 - start) / packs;
   // levels 1 to 10 are eased in, as for the monsters
-  const soften = 1 - 0.3 * (Math.max(0, 11 - lv) / 10);
+  const soften = 1 - BEGINNER_EASE * (Math.max(0, 11 - lv) / 10);
   const coins: Coin[] = [];
   for (let i = 0; i < packs; i++) {
     let z = start + span * (i + 0.15 + roll() * 0.7);
