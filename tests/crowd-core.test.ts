@@ -19,6 +19,7 @@ import {
   MAX_PACK_COINS,
   MIN_PACK_COINS,
   newLevel,
+  BEGINNER_EASE,
   progress,
   RUN_SPEED,
   shotRate,
@@ -136,9 +137,11 @@ test("levels 1 to 10 are eased in, and the easing is gone from level 11", () => 
     else assert.equal(ratio, 1);
     last = ratio;
   }
-  // level 1 is about 30% gentler
+  // level 1 is about 15% gentler
   assert.ok(
-    Math.abs(newLevel(1).boss.summonEvery / unsoftened(1) - 1 / 0.7) < 1e-9,
+    Math.abs(
+      newLevel(1).boss.summonEvery / unsoftened(1) - 1 / (1 - BEGINNER_EASE),
+    ) < 1e-9,
   );
 });
 
