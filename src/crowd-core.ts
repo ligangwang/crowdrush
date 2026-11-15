@@ -160,7 +160,20 @@ export type World = {
 };
 
 export const START_COUNT = 1;
-export const MAX_COUNT = 999;
+/**
+ * A sanity cap on the squad, far past anything a level expects. The rules
+ * have no other limit on its size: the scene draws at most MAX_DRAWN
+ * soldiers, and past the fire-rate cap a bigger squad hits harder
+ * (heavyRounds), so every good gate keeps paying off.
+ */
+export const MAX_COUNT = 99999;
+/** Short squad-size label: 950, 4,800, 12k. */
+export const countLabel = (n: number) =>
+  n >= 10000
+    ? `${Math.round(n / 1000)}k`
+    : n >= 1000
+      ? `${Math.floor(n / 1000)},${String(n % 1000).padStart(3, "0")}`
+      : String(n);
 export const RUN_SPEED = 10;
 export const BULLET_SPEED = 46;
 export const BULLET_RANGE = 21;
@@ -226,7 +239,7 @@ export const FULL_RATE_COUNT = ((MAX_FIRE_RATE - 4.5) / 1.2) ** 2;
 /**
  * Past the fire-rate cap a bigger squad hits harder instead: each round's
  * damage keeps growing with the square root of the squad, as the fire rate
- * did below the cap (about 1.7x at 500 soldiers, 2.4x at 999).
+ * did below the cap (about 1.7x at 500 soldiers, 2.4x at 999, 5x at 4,000).
  */
 export const heavyRounds = (count: number) =>
   Math.max(1, Math.sqrt(count / FULL_RATE_COUNT));
@@ -272,8 +285,8 @@ export function applyPerks(w: World, perks: Perks) {
   if (w.phase === "ready") w.count = w.best = startCount(perks);
 }
 export const RATE_PERK = 0.1;
-/** Share of the upgrades' advantage that levels are sized for (40%). */
-export const PERK_PRICED = 0.4;
+/** Share of the upgrades' advantage that levels are sized for (55%). */
+export const PERK_PRICED = 0.55;
 /** How much weaker monsters and the boss are on level 1 (fading by 11). */
 export const BEGINNER_EASE = 0.15;
 /** Extra toughness for every monster, and for the boss, at every level. */

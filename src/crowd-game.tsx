@@ -13,6 +13,7 @@ import {
 } from "./crowd-progress";
 import {
   critChance,
+  countLabel,
   retryEase,
   RATE_PERK,
   defeated,
@@ -729,7 +730,7 @@ export function CrowdGame() {
     if (w.count > 0) {
       const p = scene.project(w.x, w.z, 1.7);
       items.push({
-        text: String(w.count),
+        text: countLabel(w.count),
         x: p.x,
         y: p.y,
         cls: "crowd3d-count",
@@ -746,7 +747,7 @@ export function CrowdGame() {
         const p = scene.project(th.x, th.z, 1.7);
         if (p.visible)
           items.push({
-            text: String(th.count),
+            text: countLabel(th.count),
             x: p.x,
             y: p.y,
             cls: "crowd3d-count rival",
