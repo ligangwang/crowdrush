@@ -13,6 +13,7 @@ import {
 } from "./crowd-progress";
 import {
   critChance,
+  expectedTiers,
   countLabel,
   retryEase,
   RATE_PERK,
@@ -981,6 +982,17 @@ export function CrowdGame() {
           <div className="crowd-overlay">
             <p className="eyebrow">{t(`Level ${level}`)}</p>
             <h2>{t("Ready to rush?")}</h2>
+            {(() => {
+              const due = expectedTiers(level);
+              const behind = UPGRADE_KINDS.some((k) => perks[k] < due);
+              return (
+                behind && (
+                  <p className="crowd-upgrade-due">
+                    {t(`This level expects upgrades at level ${due}`)}
+                  </p>
+                )
+              );
+            })()}
             {tries > 0 && (
               <p className="crowd-retry-ease">
                 {t(

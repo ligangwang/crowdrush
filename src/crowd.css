@@ -476,6 +476,12 @@
   font-weight: 700;
   color: #ffd25e;
 }
+.crowd-upgrade-due {
+  margin: -4px 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffd25e;
+}
 .crowd-retry-ease {
   margin: -4px 0 0;
   font-size: 0.85rem;
