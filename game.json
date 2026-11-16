@@ -1,6 +1,6 @@
 {
   "id": "crowdrush",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "title": {
     "en": "Crowd Rush",
     "zh": "人潮突击"
@@ -10,6 +10,7 @@
     "zh": "3D 人潮跑酷：穿过数字门壮大队伍，击碎箱子和怪物，在每关结尾打败首领。"
   },
   "entry": "index.html",
+  "cover": "cover.jpg",
   "badges": [
     {
       "id": "first-win",
