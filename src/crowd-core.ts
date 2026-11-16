@@ -271,6 +271,21 @@ export const tiersAt = (level: number) =>
 export const CRIT_CHANCE = [
   0, 0.15, 0.3, 0.45, 0.53, 0.61, 0.69, 0.76, 0.84, 0.92, 1,
 ];
+/**
+ * The upgrade tier each kind a player is expected to own on a level: one
+ * tier every UPGRADE_PACE levels, never past what has unlocked. Levels are
+ * sized for it, so progress leans on the upgrade shop.
+ */
+export const UPGRADE_PACE = 5;
+export const expectedTiers = (level: number) =>
+  Math.min(tiersAt(level), Math.floor(level / UPGRADE_PACE));
+/** A per-tier table read at a fractional tier, between its two neighbours. */
+export function tierValue(table: number[], tier: number) {
+  const t = Math.max(0, Math.min(tier, table.length - 1));
+  const i = Math.floor(t);
+  const next = table[Math.min(i + 1, table.length - 1)];
+  return table[i] + (next - table[i]) * (t - i);
+}
 export const critChance = (power: number) =>
   CRIT_CHANCE[Math.max(0, Math.min(power, MAX_TIER))];
 /** How many soldiers a level starts with, given the upgrades owned. */
@@ -285,8 +300,8 @@ export function applyPerks(w: World, perks: Perks) {
   if (w.phase === "ready") w.count = w.best = startCount(perks);
 }
 export const RATE_PERK = 0.1;
-/** Share of the upgrades' advantage that levels are sized for (55%). */
-export const PERK_PRICED = 0.55;
+/** Share of the upgrades' advantage that levels are sized for (70%). */
+export const PERK_PRICED = 0.7;
 /** How much weaker monsters and the boss are on level 1 (fading by 11). */
 export const BEGINNER_EASE = 0.15;
 /** Extra toughness for every monster, and for the boss, at every level. */
@@ -338,15 +353,16 @@ export function newLevel(
   tries = 0,
 ): World {
   const lv = Math.max(1, Math.floor(level));
-  // Upgrades are partly priced in: the level expects a share (PERK_PRICED)
-  // of the extra soldiers and damage they give, so they don't make it a
-  // walkover, and the rest is the player's edge. With every tier unlocked
-  // so far, a sensible player clears nearly every level.
-  const extraSquad = startCount(perks) - START_COUNT;
+  // Each level is sized for the upgrades a player should own by now
+  // (expectedTiers), or the ones they own if more, at PERK_PRICED of their
+  // edge. A player who keeps up with the upgrade shop keeps the rest as a
+  // margin; one who never upgrades falls further behind every level.
+  const due = expectedTiers(lv);
+  const sized = (own: number) => Math.max(own, due) * PERK_PRICED;
+  const extraSquad = tierValue(SQUAD_PERK, sized(perks.squad));
   const perkDamage =
-    1 +
-    PERK_PRICED *
-      ((1 + RATE_PERK * perks.rate) * (1 + critChance(perks.power)) - 1);
+    (1 + RATE_PERK * sized(perks.rate)) *
+    (1 + tierValue(CRIT_CHANCE, sized(perks.power)));
   const random = rng(lv * 7919 + 17);
   const pick = <T>(items: T[]) => items[Math.floor(random() * items.length)];
   const int = (lo: number, hi: number) =>
@@ -356,7 +372,7 @@ export function newLevel(
   const sections = 8 + Math.min(lv, 10);
   const things: Thing[] = [];
   let z = 34;
-  let expected = START_COUNT + Math.round(extraSquad * PERK_PRICED);
+  let expected = START_COUNT + Math.round(extraSquad);
   let id = 0;
   let lastKind = "";
   // weapon crates use their own random stream so the rest stays the same

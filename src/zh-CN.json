@@ -19,6 +19,7 @@
   "Fire rate": "射速",
   "Max": "已满级",
   "Unlocks at level {0}": "第 {0} 关解锁",
+  "This level expects upgrades at level {0}": "本关建议将升级提升到 {0} 级",
   "Try {0}: enemies {1}% weaker": "第 {0} 次尝试：敌人减弱 {1}%",
   "Sign in to buy with dingn coins": "登录后用 dingn 金币购买",
   "Sign in to buy {0} +{1}": "登录后购买{0} +{1}",

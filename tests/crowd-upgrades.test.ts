@@ -150,7 +150,8 @@ test("the squad upgrade starts each level with more soldiers", () => {
 });
 
 test("levels are partly sized for the upgrades the player owns", () => {
-  const max = { power: 3, rate: 3, squad: 3 };
+  // more than any level expects, so the extra tiers make a difference
+  const max = { power: 10, rate: 10, squad: 10 };
   for (const lv of [2, 12, 30]) {
     const plain = newLevel(lv);
     const upgraded = newLevel(lv, max);

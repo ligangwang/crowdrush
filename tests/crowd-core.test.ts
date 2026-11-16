@@ -31,6 +31,7 @@ import {
   step,
   type World,
   applyPerks,
+  expectedTiers,
   retryEase,
   tiersAt,
   WALL_HIT,
@@ -119,22 +120,26 @@ test("gate maths never goes below zero or above the cap", () => {
   assert.deepEqual([950, 4800, 12345].map(countLabel), ["950", "4,800", "12k"]);
 });
 
-test("a sensible player clears the opening levels and most of the first twenty", () => {
+test("a sensible player who keeps up with upgrades clears nearly every early level", () => {
   let wins = 0;
   for (let lv = 1; lv <= 20; lv++) {
-    const w = play(lv, autopilot);
-    if (lv <= 12)
-      assert.equal(
-        w.phase,
-        "won",
-        `level ${lv} ended ${w.phase} at ${progress(w)}`,
-      );
+    const k = expectedTiers(lv);
+    const w = play(lv, autopilot, { power: k, rate: k, squad: k });
     if (w.phase === "won") {
       wins++;
       assert.ok(stars(w) >= 1);
     }
   }
   assert.ok(wins >= 17, `won ${wins} of 20`);
+});
+
+test("without upgrades the first levels are fine, but later ones are hard", () => {
+  for (let lv = 1; lv <= 5; lv++)
+    assert.equal(play(lv, autopilot).phase, "won", `level ${lv}`);
+  let wins = 0;
+  for (let lv = 21; lv <= 40; lv += 2)
+    if (play(lv, autopilot).phase === "won") wins++;
+  assert.ok(wins <= 2, `won ${wins} of 10 without upgrades`);
 });
 
 test("levels 1 to 10 are eased in, and the easing is gone from level 11", () => {
