@@ -11,6 +11,8 @@
  */
 import * as THREE from "three";
 import {
+  BOSS_FALL,
+  BOSS_IMPACT,
   BOSS_STOP,
   crowdRadius,
   opLabel,
@@ -73,6 +75,8 @@ export type SceneFx = {
   shake: number;
   bossHit: number;
   slamAnim: number;
+  /** Seconds since the boss was beaten, or -1 while it stands. */
+  bossDown: number;
   sparks: {
     x: number;
     z: number;
@@ -610,6 +614,31 @@ class Monsters {
   }
 }
 
+/**
+ * How the beaten boss moves, `t` seconds after its last hit (-1: standing).
+ * It shudders and rears back with a roar, topples sideways and crashes down
+ * at BOSS_IMPACT with a small bounce, lies there, then sinks away.
+ */
+export function bossFallPose(t: number) {
+  const pose = { shake: 0, rear: 0, roar: 0, tip: 0, sink: 0, gone: false };
+  if (t < 0) return pose;
+  const rearUp = Math.min(1, t / 0.6);
+  if (t < BOSS_IMPACT) {
+    pose.shake = Math.sin(t * 55) * 0.18 * (1 - rearUp * 0.5);
+    pose.rear = -0.3 * Math.sin((rearUp * Math.PI) / 2);
+    pose.roar = 0.5 * Math.sin(rearUp * Math.PI);
+    const p = Math.max(0, (t - 0.6) / (BOSS_IMPACT - 0.6));
+    pose.tip = p * p * 1.5;
+    pose.rear *= 1 - p;
+  } else {
+    const since = t - BOSS_IMPACT;
+    pose.tip = 1.5 - 0.12 * Math.sin(since * 12) * Math.exp(-since * 5);
+  }
+  if (t > BOSS_FALL - 0.4) pose.sink = ((t - (BOSS_FALL - 0.4)) / 0.6) ** 2 * 3;
+  pose.gone = t > BOSS_FALL + 0.4;
+  return pose;
+}
+
 /** The horned boss at the end of the road. */
 class Boss {
   group = new THREE.Group();
@@ -803,7 +832,8 @@ class Boss {
       if (fx.slamAnim > this.lastSlam + 0.5 && this.attack)
         this.attack.reset().fadeIn(0.1).play();
       this.lastSlam = fx.slamAnim;
-      this.mixer?.update(dt);
+      // once beaten, its animation slows to a stagger, then freezes
+      this.mixer?.update(dead < 0 ? dt : dead < 0.6 ? dt * 0.3 : 0);
       for (const m of this.modelMats)
         m.emissive.setRGB(
           fx.bossHit * 0.35,
@@ -816,13 +846,14 @@ class Boss {
         : fx.slamAnim > 0.5
           ? (1 - fx.slamAnim) * 2
           : fx.slamAnim * 2;
-      const k = Math.min(1, dead);
-      if (this.jaw) this.jaw.rotation.x += lunge * 0.7;
-      this.model.rotation.x = lunge * 0.25;
+      const fall = bossFallPose(dead);
+      if (this.jaw) this.jaw.rotation.x += lunge * 0.7 + fall.roar;
+      this.model.rotation.x = lunge * 0.25 + fall.rear;
       this.model.position.z = lunge * 1.2;
-      this.model.rotation.z = k * 1.5;
-      this.model.position.y = -k * k * 4;
-      this.group.visible = k < 1;
+      this.model.position.x = fall.shake;
+      this.model.rotation.z = fall.tip;
+      this.model.position.y = -fall.sink;
+      this.group.visible = !fall.gone;
       return;
     }
     const lift = fx.slamAnim > 0.5 ? (1 - fx.slamAnim) * 2 : fx.slamAnim * 2;
@@ -835,11 +866,13 @@ class Boss {
     for (const m of this.skin)
       m.emissive.setRGB(fx.bossHit * 0.3, fx.bossHit * 0.12, fx.bossHit * 0.25);
     this.eyes.emissiveIntensity = 0.7 + 0.5 * Math.sin(fx.clock * 6);
-    // after the last hit the boss topples and sinks away
-    const k = Math.min(1, dead);
-    this.body.rotation.x = -k * 1.4;
-    this.body.position.y -= k * k * 6;
-    this.group.visible = k < 1;
+    // after the last hit the boss staggers, topples and sinks away
+    const fall = bossFallPose(dead);
+    this.body.position.x = fall.shake;
+    this.body.rotation.x = fall.rear;
+    this.body.rotation.z = fall.tip;
+    this.body.position.y -= fall.sink;
+    this.group.visible = !fall.gone;
   }
 }
 
@@ -1339,7 +1372,6 @@ export class CrowdScene {
   private packs: CoinPackView[] = [];
   private camX = 0;
   private camPull = 0;
-  private bossDead = 0;
   private width = 1;
   private height = 1;
   private dpr = 1;
@@ -1620,7 +1652,6 @@ export class CrowdScene {
   /** Builds the road, scenery, gates and blocks for a fresh level. */
   load(w: World) {
     this.clearLevel();
-    this.bossDead = 0;
     const L = w.length + 40;
     const keep = <G extends THREE.BufferGeometry>(g: G) => (
       this.levelGeos.push(g),
@@ -2002,8 +2033,12 @@ export class CrowdScene {
     this.blobs.finish();
 
     // boss
-    if (w.phase === "won") this.bossDead += dt * 0.8;
-    this.boss.update(w, fx, this.bossDead, dt);
+    this.boss.update(
+      w,
+      fx,
+      w.phase === "won" ? Math.max(0, fx.bossDown) : -1,
+      dt,
+    );
     this.boss.group.visible = this.boss.group.visible && w.boss.z < far;
 
     // bullets: hotter colours and fatter rounds as the weapon gets stronger
