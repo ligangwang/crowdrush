@@ -43,7 +43,14 @@ import {
   type BuyResult,
   type UpgradeKind,
 } from "./crowd-upgrades";
-import { applyPerks, NO_PERKS, startCount, type Perks } from "./crowd-core";
+import {
+  applyPerks,
+  BOSS_FALL,
+  BOSS_IMPACT,
+  NO_PERKS,
+  startCount,
+  type Perks,
+} from "./crowd-core";
 
 const TEAM = "#3ea6ff";
 const RIVAL = "#ff5a5f";
@@ -113,6 +120,8 @@ export function CrowdGame() {
     shake: 0,
     bossHit: 0,
     slamAnim: 0,
+    /** Seconds since the boss was beaten, or -1 while it stands. */
+    bossDown: -1,
     clock: 0,
     acc: 0,
     shots: 0,
@@ -124,6 +133,8 @@ export function CrowdGame() {
   const [phase, setPhase] = useState<World["phase"]>("ready");
   const [level, setLevel] = useState(1);
   const [result, setResult] = useState({ count: 0, stars: 0 });
+  // The win screen waits for the beaten boss to fall (BOSS_FALL seconds).
+  const [showWin, setShowWin] = useState(false);
   // A failed level still pays dingn coins for the enemies destroyed: the
   // share destroyed, and coins paid (null while asking, or signed out).
   const [loss, setLoss] = useState<{
@@ -239,6 +250,8 @@ export function CrowdGame() {
     f.floats = [];
     f.shake = 0;
     f.slamAnim = 0;
+    f.bossDown = -1;
+    setShowWin(false);
     sceneRef.current?.load(world.current);
     dropPacks(world.current);
     setWeapon({ power: 1, rapid: 0 });
@@ -419,10 +432,15 @@ export function CrowdGame() {
       for (const e of w.events) react(e);
       w.events.length = 0;
     }
+    if (w.phase === "won" && f.bossDown >= 0) bossFall(w, f.bossDown, dt);
     if (w.shotsFired !== f.shots) {
       const fired = w.shotsFired - f.shots;
       f.shots = w.shotsFired;
-      sfx.current?.play({ type: "shot" });
+      // a bigger, better-armed squad sounds heavier
+      sfx.current?.play({
+        type: "shot",
+        power: firepower(w.count) * 0.6 + ((w.power - 1) / 3) * 0.4,
+      });
       muzzle(w, Math.min(fired, 4));
     }
     if (was !== w.phase) {
@@ -658,10 +676,48 @@ export function CrowdGame() {
         burst(w.x, w.z + 0.5, 0.2, TEAM, Math.min(30, 6 + e.lost), 3);
         break;
       case "won":
+        // the boss staggers in a burst of explosions, then falls (bossFall)
+        f.bossDown = 0;
+        f.bossHit = 1;
+        f.shake = Math.max(f.shake, 0.9);
         burst(0, w.boss.z, 4, "#ffd36a", 90, 7);
-        burst(0, w.boss.z, 4, "#a580ff", 70, 6);
+        burst(0, w.boss.z, 4, "#ff7a3a", 60, 6);
         break;
     }
+  }
+
+  /**
+   * The beaten boss's fall, timed from the last hit: explosions burst on it
+   * as it staggers, it crashes down at BOSS_IMPACT, the fanfare plays, and
+   * the win screen shows at BOSS_FALL.
+   */
+  function bossFall(w: World, before: number, dt: number) {
+    const f = fx.current;
+    const now = before + dt;
+    f.bossDown = now;
+    const crossed = (t: number) => before < t && now >= t;
+    for (const t of [0.22, 0.45, 0.7])
+      if (crossed(t)) {
+        const x = (Math.random() * 2 - 1) * 0.5;
+        burst(x, w.boss.z - 0.5, 2.5 + Math.random() * 2.5, "#ffb347", 40, 5);
+        burst(x, w.boss.z - 0.5, 3, "#ff5a36", 24, 4);
+        f.shake = Math.max(f.shake, 0.6);
+        f.bossHit = 1;
+        sfx.current?.play({ type: "blast" });
+      }
+    if (crossed(BOSS_IMPACT)) {
+      // it hits the ground: a dust cloud, a big shake and a crash
+      burst(0.4, w.boss.z, 0.3, "#c9b28a", 90, 6);
+      burst(-0.4, w.boss.z, 0.3, "#a8957a", 70, 5);
+      f.shake = Math.max(f.shake, 1.2);
+      sfx.current?.play({ type: "impact" });
+    }
+    if (crossed(BOSS_IMPACT + 0.35)) {
+      burst(0, w.boss.z, 3, "#ffd36a", 80, 7);
+      burst(0, w.boss.z, 3, "#a580ff", 60, 6);
+      sfx.current?.play({ type: "fanfare" });
+    }
+    if (crossed(BOSS_FALL)) setShowWin(true);
   }
 
   /**
@@ -832,7 +888,7 @@ export function CrowdGame() {
     else if (down && (k === "enter" || k === " ")) {
       const ph = world.current.phase;
       if (ph === "ready") begin();
-      else if (ph === "won") next();
+      else if (ph === "won" && fx.current.bossDown >= BOSS_FALL) next();
       else if (ph === "lost") retry();
     } else return;
     e.preventDefault();
@@ -1143,7 +1199,7 @@ export function CrowdGame() {
             </div>
           </div>
         )}
-        {phase === "won" && (
+        {phase === "won" && showWin && (
           <div className="crowd-overlay">
             <p
               className="crowd-stars"

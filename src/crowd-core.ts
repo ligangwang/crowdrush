@@ -179,6 +179,10 @@ export const BULLET_SPEED = 46;
 export const BULLET_RANGE = 21;
 /** Distance in front of the boss where the squad halts and opens fire. */
 export const BOSS_STOP = 14;
+/** Seconds from the boss's last hit until it crashes to the ground. */
+export const BOSS_IMPACT = 1.05;
+/** Seconds from the boss's last hit until the win screen shows. */
+export const BOSS_FALL = 2.2;
 /** How fast the boss stomps toward the squad once the fight starts (m/s). */
 export const BOSS_WALK = 1.0;
 /** How close the boss gets before it tramples the squad. */
