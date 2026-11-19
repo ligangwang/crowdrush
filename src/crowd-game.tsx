@@ -194,6 +194,7 @@ export function CrowdGame() {
     kind: UpgradeKind;
     tier: number;
     price: number;
+    balance?: number;
   } | null>(null);
   useEffect(() => {
     let active = true;
@@ -226,10 +227,15 @@ export function CrowdGame() {
     setPoor(null);
     const result: BuyResult = await buyUpgrade(sdk, next.id);
     setBuying(null);
-    if (result === "bought") setPerks(await loadPerks(sdk));
-    else if (result === "poor")
-      setPoor({ kind, tier: next.tier, price: next.price });
-    else if (result === "failed")
+    if (result.status === "bought") setPerks(await loadPerks(sdk));
+    else if (result.status === "poor")
+      setPoor({
+        kind,
+        tier: next.tier,
+        price: next.price,
+        balance: result.balance,
+      });
+    else if (result.status === "failed")
       setShopNote(tRef.current("The upgrade shop is unavailable right now."));
   }
   const locked = needsSignIn(level, !!user);
@@ -1179,6 +1185,14 @@ export function CrowdGame() {
                         `${upgradeName(poor.kind)} +${poor.tier} costs ${poor.price} coins.`,
                       )}
                     </span>
+                    {poor.balance !== undefined &&
+                      poor.balance < poor.price && (
+                        <span className="crowd-shop-poor-gap">
+                          {t(
+                            `You have ${poor.balance}, so you need ${poor.price - poor.balance} more.`,
+                          )}
+                        </span>
+                      )}
                     <span>
                       {t(
                         "Earn more by clearing levels, shooting open coin packs on the road, and taking out enemies even when a level fails.",
