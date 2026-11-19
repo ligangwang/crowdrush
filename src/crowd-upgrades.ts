@@ -52,18 +52,28 @@ export async function loadPerks(sdk: Shop): Promise<Perks> {
   }
 }
 
-export type BuyResult = "bought" | "cancelled" | "poor" | "failed";
+export type BuyResult = {
+  status: "bought" | "cancelled" | "poor" | "failed";
+  /** The player's coins, when they couldn't afford it and dingn said. */
+  balance?: number;
+};
 
 /** Buys the next tier of an upgrade. dingn asks the player first. */
 export async function buyUpgrade(sdk: Shop, id: string): Promise<BuyResult> {
   try {
     await sdk.rewards.spend(id);
-    return "bought";
+    return { status: "bought" };
   } catch (err) {
-    const code = (err as { code?: string })?.code;
-    if (code === "cancelled") return "cancelled";
-    if (code === "not_enough_coins") return "poor";
+    const { code, balance } = (err ?? {}) as {
+      code?: string;
+      balance?: unknown;
+    };
+    if (code === "cancelled") return { status: "cancelled" };
+    if (code === "not_enough_coins")
+      return typeof balance === "number" && balance >= 0
+        ? { status: "poor", balance }
+        : { status: "poor" };
     console.warn("Crowd Rush upgrade", id, err);
-    return "failed";
+    return { status: "failed" };
   }
 }

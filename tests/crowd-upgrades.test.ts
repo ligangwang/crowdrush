@@ -78,20 +78,31 @@ test("buying reports what happened, and signed-out players own nothing", async (
       shop: async () => [item("rate-1", true)],
     },
   });
-  assert.equal(
+  assert.deepEqual(
     await buyUpgrade(
       sdk(async () => ({ new: true, coins: 50 })),
       "power-1",
     ),
-    "bought",
+    { status: "bought" },
   );
-  assert.equal(
-    await buyUpgrade(sdk(fail("cancelled")), "power-1"),
-    "cancelled",
-  );
-  assert.equal(
-    await buyUpgrade(sdk(fail("not_enough_coins")), "power-1"),
-    "poor",
+  assert.deepEqual(await buyUpgrade(sdk(fail("cancelled")), "power-1"), {
+    status: "cancelled",
+  });
+  assert.deepEqual(await buyUpgrade(sdk(fail("not_enough_coins")), "power-1"), {
+    status: "poor",
+  });
+  // dingn says how many coins the player has, so the game can show the gap
+  assert.deepEqual(
+    await buyUpgrade(
+      sdk(async () => {
+        throw Object.assign(new Error("poor"), {
+          code: "not_enough_coins",
+          balance: 120,
+        });
+      }),
+      "power-1",
+    ),
+    { status: "poor", balance: 120 },
   );
   assert.deepEqual(await loadPerks(sdk(async () => ({}))), {
     power: 0,

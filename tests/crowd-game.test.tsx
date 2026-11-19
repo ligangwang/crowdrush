@@ -89,6 +89,9 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
     locale,
     player: { signedIn, name: signedIn ? "Ada" : "", avatar: "" },
     embedded: true,
+    challenge: null,
+    challengeLink: async () => "",
+    roundEnded: () => {},
     onPlayer: () => () => {},
     storage: {
       get: async (key) => stored.get(key) ?? null,
@@ -203,7 +206,10 @@ test("a signed-in player buys upgrades with dingn coins on the start screen", as
   ).toBeTruthy();
   // a player without enough coins is told how to earn them
   sdk.rewards.spend = async () => {
-    throw Object.assign(new Error("poor"), { code: "not_enough_coins" });
+    throw Object.assign(new Error("poor"), {
+      code: "not_enough_coins",
+      balance: 20,
+    });
   };
   await act(async () =>
     fireEvent.click(
@@ -213,6 +219,7 @@ test("a signed-in player buys upgrades with dingn coins on the start screen", as
   expect(await screen.findByRole("alert")).toBeTruthy();
   expect(screen.getByText("Not enough coins")).toBeTruthy();
   expect(screen.getByText(/costs 50 coins/)).toBeTruthy();
+  expect(screen.getByText("You have 20, so you need 30 more.")).toBeTruthy();
 });
 
 test("signed-out players see the upgrades, and buying asks them to sign in", async () => {

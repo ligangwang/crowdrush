@@ -597,6 +597,11 @@
   font-size: 0.95rem;
   color: #fff;
 }
+/* How many more coins the upgrade needs. */
+.crowd-shop-poor-gap {
+  font-weight: 700;
+  color: #ffd166;
+}
 .crowd-shop-poor-close {
   border: 0;
   background: none;

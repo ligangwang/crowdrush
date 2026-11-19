@@ -2,7 +2,12 @@ export declare const PROTOCOL: 1;
 export type Locale = "en" | "zh-CN";
 export type Player = { signedIn: boolean; name: string; avatar: string };
 export type Json =
-  null | boolean | number | string | Json[] | { [key: string]: Json };
+  | null
+  | boolean
+  | number
+  | string
+  | Json[]
+  | { [key: string]: Json };
 export type BadgeTier = "bronze" | "silver" | "gold" | "diamond";
 /** A badge from the game's game.json, in the player's language. */
 export type Badge = {
@@ -50,6 +55,27 @@ export type Earning = {
   /** True in a version dingn has not reviewed, or in the playground: nothing was paid. */
   test?: boolean;
 };
+/** What a score is counted in, so dingn can word a challenge in both languages. */
+export type ChallengeUnit =
+  | "points"
+  | "digits"
+  | "cards"
+  | "levels"
+  | "stars"
+  | "words"
+  | "coins";
+/**
+ * A score for a friend to beat. `mode` (1-24 lowercase letters, digits or
+ * dashes) and `seed` (1-32 letters, digits or dashes, such as a day) tell the
+ * game which round to replay, so the friend plays the same one.
+ */
+export type Challenge = {
+  mode: string;
+  seed?: string;
+  /** A whole number from 0 to 1,000,000,000. */
+  score: number;
+  unit: ChallengeUnit;
+};
 export type DingnGame = {
   gameId: string;
   version: string;
@@ -78,18 +104,38 @@ export type DingnGame = {
      * Buys an upgrade from game.json's `shop` with the player's dingn coins.
      * dingn asks the player to confirm first. Rejects with code "cancelled"
      * (the player said no), "not_enough_coins", "requires" (buy the upgrade
-     * it requires first) or "signed_out".
+     * it requires first) or "signed_out". A "not_enough_coins" error also
+     * carries `balance`, the coins the player has, so the game can show how
+     * many more they need.
      */
     spend(id: string): Promise<Purchase>;
     shop(): Promise<ShopItem[]>;
     /**
      * Pays the signed-in player 1-10 dingn coins for play itself, such as a
      * failed level that still got somewhere. Each game can pay a player at
-     * most 200 coins a day this way, on top of its badges. Rejects with code
+     * most 500 coins a day this way, on top of its badges. Rejects with code
      * "signed_out" for a signed-out player.
      */
     earn(coins: number): Promise<Earning>;
   };
+  /**
+   * The challenge in the page's address when a friend's challenge link
+   * opened the game, otherwise null. dingn has already shown the player the
+   * score to beat; start that round and compare at the end.
+   */
+  challenge: Challenge | null;
+  /**
+   * A link to this game that opens `challenge` for whoever follows it, with a
+   * link preview that shows the score. Share it yourself (copy it, or
+   * navigator.share). Rejects with code "invalid" for a malformed challenge,
+   * and "unknown_method" on a dingn website from before challenge links.
+   */
+  challengeLink(challenge: Challenge): Promise<string>;
+  /**
+   * Tells dingn a round was played to the end (won or lost), for the
+   * website's play statistics. Call it once per finished round.
+   */
+  roundEnded(): void;
   requestSignIn(): void;
   /** Leaves the game for a dingn page, such as "/" for the game list. The website keeps the player's language. */
   navigate(path: string): void;
