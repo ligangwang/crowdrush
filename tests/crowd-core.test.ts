@@ -33,6 +33,8 @@ import {
   applyPerks,
   expectedTiers,
   retryEase,
+  giveUp,
+  hopeless,
   tiersAt,
   WALL_HIT,
   type Perks,
@@ -606,4 +608,33 @@ test("each failed try of the same level eases it, up to half", () => {
   assert.ok(boss(1) < boss(0) && boss(3) < boss(1));
   assert.equal(boss(5), boss(9));
   assert.equal(retryEase(9), 0.5);
+});
+
+test("giving up ends a level in play as a loss, and nothing else", () => {
+  const w = newLevel(3);
+  giveUp(w);
+  assert.equal(w.phase, "ready");
+  start(w);
+  giveUp(w);
+  assert.equal(w.phase, "lost");
+  assert.equal(w.count, 0);
+});
+
+test("a boss fight is hopeless when the squad falls far faster than the boss", () => {
+  // the clip that asked for this: 173 → 16 soldiers while the boss lost 128 of 28,783
+  assert.equal(
+    hopeless({ hp: 28783, count: 173 }, { hp: 28655, count: 16 }),
+    true,
+  );
+  // an even race is not
+  assert.equal(
+    hopeless({ hp: 1000, count: 100 }, { hp: 600, count: 60 }),
+    false,
+  );
+  // nor is a squad holding steady, or a boss already down
+  assert.equal(
+    hopeless({ hp: 1000, count: 50 }, { hp: 990, count: 50 }),
+    false,
+  );
+  assert.equal(hopeless({ hp: 100, count: 50 }, { hp: 0, count: 10 }), false);
 });

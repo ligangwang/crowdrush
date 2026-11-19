@@ -403,3 +403,56 @@ test("the sign-in prompt is translated into Simplified Chinese", async () => {
   expect(screen.getByRole("button", { name: "登录继续玩" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "重玩第 5 关" })).toBeTruthy();
 });
+
+test("the pause menu holds the run and restarts the level as an easier try", async () => {
+  fakeSdk(true);
+  const earned: number[] = [];
+  sdk.rewards.earn = async (coins) => {
+    earned.push(coins);
+    return { coins, left: 30 - coins };
+  };
+  await play({ level: "3" });
+  const start = await screen.findByRole(
+    "button",
+    { name: "Start" },
+    { timeout: 5000 },
+  );
+  await act(async () => fireEvent.click(start));
+  const w = (
+    window as unknown as {
+      __crowd: { current: { z: number; phase: string; boss: { hp: number } } };
+    }
+  ).__crowd.current;
+  fireEvent.click(await screen.findByRole("button", { name: "Pause" }));
+  expect(screen.getByRole("dialog", { name: "Paused" })).toBeTruthy();
+  // nothing moves while paused
+  const z = w.z;
+  await new Promise((r) => setTimeout(r, 150));
+  expect(w.z).toBe(z);
+  fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+  await waitFor(() => expect(w.z).toBeGreaterThan(z));
+  // half the boss beaten, then the player gives up: they keep those coins
+  w.boss.hp /= 2;
+  fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+  fireEvent.click(screen.getByRole("button", { name: "Restart level" }));
+  expect(await screen.findByRole("button", { name: "Start" })).toBeTruthy();
+  expect(screen.getByText("Try 2: enemies 10% weaker")).toBeTruthy();
+  expect(screen.queryByText("Squad wiped out")).toBeNull();
+  await waitFor(() => expect(earned.length).toBe(1));
+  expect(earned[0]).toBeGreaterThan(0);
+});
+
+test("the pause menu is translated into Simplified Chinese", async () => {
+  fakeSdk(false, "zh-CN");
+  await play();
+  const start = await screen.findByRole(
+    "button",
+    { name: "开始" },
+    { timeout: 5000 },
+  );
+  await act(async () => fireEvent.click(start));
+  fireEvent.click(await screen.findByRole("button", { name: "暂停" }));
+  expect(screen.getByRole("dialog", { name: "已暂停" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "继续" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "重开本关" })).toBeTruthy();
+});

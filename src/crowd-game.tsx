@@ -18,6 +18,8 @@ import {
   retryEase,
   RATE_PERK,
   defeated,
+  giveUp,
+  hopeless,
   levelCoins,
   firepower,
   crowdRadius,
@@ -129,7 +131,16 @@ export function CrowdGame() {
     drag: null as null | { id: number; x0: number; target0: number },
     keys: { left: false, right: false },
     paused: false,
+    /** Paused by the player (the pause button), apart from losing focus. */
+    held: false,
+    /** The boss fight sampled once a second: [seconds in, hp, squad]. */
+    fight: [] as { t: number; hp: number; count: number }[],
   });
+  // The pause menu, and whether the boss fight looks lost (a restart
+  // button shows so the player needn't wait for the squad to fall).
+  const [held, setHeld] = useState(false);
+  const [doomed, setDoomed] = useState(false);
+  const doomedRef = useRef(false);
   const [phase, setPhase] = useState<World["phase"]>("ready");
   const [level, setLevel] = useState(1);
   const [result, setResult] = useState({ count: 0, stars: 0 });
@@ -257,6 +268,11 @@ export function CrowdGame() {
     f.shake = 0;
     f.slamAnim = 0;
     f.bossDown = -1;
+    f.held = false;
+    f.fight = [];
+    setHeld(false);
+    doomedRef.current = false;
+    setDoomed(false);
     setShowWin(false);
     sceneRef.current?.load(world.current);
     dropPacks(world.current);
@@ -290,6 +306,32 @@ export function CrowdGame() {
   }
   const next = () => load(world.current.level + 1);
   const retry = () => load(world.current.level);
+
+  /** Pauses (or resumes) a level in play. */
+  function hold(on: boolean) {
+    const w = world.current;
+    const f = fx.current;
+    if (on && w.phase !== "run" && w.phase !== "boss") return;
+    f.held = on;
+    f.keys.left = f.keys.right = false;
+    f.drag = null;
+    setHeld(on);
+    if (!on) canvasRef.current?.focus({ preventScroll: true });
+  }
+  /**
+   * Restarts the level in play. It counts as a failed try: the player keeps
+   * the coins earned for enemies taken out, and the next try is easier.
+   */
+  function restart() {
+    const w = world.current;
+    if (w.phase === "run" || w.phase === "boss") {
+      giveUp(w);
+      w.events.length = 0;
+      lost(w);
+    }
+    load(w.level);
+    canvasRef.current?.focus({ preventScroll: true });
+  }
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -375,8 +417,9 @@ export function CrowdGame() {
           raf = requestAnimationFrame(loop);
           const dt = Math.min(0.1, (now - last) / 1000);
           last = now;
-          update(f.paused ? 0 : dt);
-          scene.render(world.current, f, f.paused ? 0 : dt);
+          const still = f.paused || f.held;
+          update(still ? 0 : dt);
+          scene.render(world.current, f, still ? 0 : dt);
           overlay(scene);
         };
         raf = requestAnimationFrame(loop);
@@ -449,24 +492,14 @@ export function CrowdGame() {
       });
       muzzle(w, Math.min(fired, 4));
     }
+    if (w.phase === "boss" && dt > 0) watchFight(w, f);
     if (was !== w.phase) {
       setPhase(w.phase);
-      if (w.phase === "lost") {
-        const tr = triesRef.current;
-        triesRef.current = {
-          level: w.level,
-          n: tr.level === w.level ? tr.n + 1 : 1,
-        };
-        const coins = levelCoins(w);
-        setLoss({ share: defeated(w), coins: null, limit: false });
-        if (coins > 0 && uidRef.current && !cappedRef.current)
-          earnCoins(sdkRef.current.rewards, coins)
-            .then(({ paid, spent }) => {
-              setLoss((l) => ({ ...l, coins: paid, limit: spent }));
-              noteEarn(spent);
-            })
-            .catch((err) => console.warn("Crowd Rush coins", err));
+      if (w.phase !== "run" && w.phase !== "boss") {
+        f.held = false;
+        setHeld(false);
       }
+      if (w.phase === "lost") lost(w);
       if (w.phase === "won") {
         triesRef.current = { level: 0, n: 0 };
         setResult({ count: w.count, stars: stars(w) });
@@ -508,6 +541,44 @@ export function CrowdGame() {
     f.shake = Math.max(0, f.shake - dt * 2.5);
     f.bossHit = Math.max(0, f.bossHit - dt * 6);
     f.slamAnim = Math.max(0, f.slamAnim - dt * 2.2);
+  }
+
+  /**
+   * A failed level: the next try of it is easier, and dingn pays coins for
+   * the share of enemies destroyed.
+   */
+  function lost(w: World) {
+    const tr = triesRef.current;
+    triesRef.current = {
+      level: w.level,
+      n: tr.level === w.level ? tr.n + 1 : 1,
+    };
+    const coins = levelCoins(w);
+    setLoss({ share: defeated(w), coins: null, limit: false });
+    if (coins > 0 && uidRef.current && !cappedRef.current)
+      earnCoins(sdkRef.current.rewards, coins)
+        .then(({ paid, spent }) => {
+          setLoss((l) => ({ ...l, coins: paid, limit: spent }));
+          noteEarn(spent);
+        })
+        .catch((err) => console.warn("Crowd Rush coins", err));
+  }
+
+  /**
+   * Samples the boss fight once a second; once it has run a few seconds and
+   * the last three show the squad falling long before the boss, a restart
+   * button offers a way out.
+   */
+  function watchFight(w: World, f: typeof fx.current) {
+    const last = f.fight[f.fight.length - 1];
+    if (last && f.clock - last.t < 1) return;
+    f.fight.push({ t: f.clock, hp: w.boss.hp, count: w.count });
+    if (f.fight.length > 4) f.fight.shift();
+    const lostCause = f.fight.length === 4 && hopeless(f.fight[0], f.fight[3]);
+    if (lostCause !== doomedRef.current) {
+      doomedRef.current = lostCause;
+      setDoomed(lostCause);
+    }
   }
 
   /**
@@ -870,6 +941,7 @@ export function CrowdGame() {
   // input
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     sfx.current?.wake();
+    if (fx.current.held) return;
     const w = world.current;
     if (w.phase === "ready") begin();
     try {
@@ -889,10 +961,17 @@ export function CrowdGame() {
   function onKey(e: React.KeyboardEvent, down: boolean) {
     const k = e.key.toLowerCase();
     const keys = fx.current.keys;
-    if (k === "arrowleft" || k === "a") keys.left = down;
+    const ph = world.current.phase;
+    if (
+      down &&
+      (k === "escape" || k === "p") &&
+      (ph === "run" || ph === "boss")
+    )
+      hold(!fx.current.held);
+    else if (fx.current.held) return;
+    else if (k === "arrowleft" || k === "a") keys.left = down;
     else if (k === "arrowright" || k === "d") keys.right = down;
     else if (down && (k === "enter" || k === " ")) {
-      const ph = world.current.phase;
       if (ph === "ready") begin();
       else if (ph === "won" && fx.current.bossDown >= BOSS_FALL) next();
       else if (ph === "lost") retry();
@@ -967,10 +1046,66 @@ export function CrowdGame() {
                 </span>
               )}
           </span>
-          <button type="button" aria-pressed={sound} onClick={toggleSound}>
-            {sound ? t("Sound on") : t("Sound off")}
-          </button>
+          <span className="crowd-hud-right">
+            {(phase === "run" || phase === "boss") && (
+              <button
+                type="button"
+                className="crowd-pause"
+                aria-label={t("Pause")}
+                aria-pressed={held}
+                onClick={() => hold(!held)}
+              >
+                <span className="crowd-pause-icon" aria-hidden />
+              </button>
+            )}
+            <button type="button" aria-pressed={sound} onClick={toggleSound}>
+              {sound ? t("Sound on") : t("Sound off")}
+            </button>
+          </span>
         </div>
+        {phase === "boss" && doomed && !held && (
+          <button type="button" className="crowd-giveup" onClick={restart}>
+            {t("Can't win? Restart")}
+          </button>
+        )}
+        {held && (phase === "run" || phase === "boss") && (
+          <div
+            className="crowd-overlay crowd-paused"
+            role="dialog"
+            aria-label={t("Paused")}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" || e.key.toLowerCase() === "p") {
+                e.preventDefault();
+                hold(false);
+              }
+            }}
+          >
+            <p className="eyebrow">{t(`Level ${level}`)}</p>
+            <h2>{t("Paused")}</h2>
+            <div className="crowd-actions crowd-pause-actions">
+              <button
+                type="button"
+                className="button"
+                autoFocus
+                onClick={() => hold(false)}
+              >
+                {t("Resume")}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={restart}
+              >
+                {t("Restart level")}
+              </button>
+            </div>
+            <p className="crowd-pause-note">
+              {t(
+                "Restarting counts as a try: you keep coins for enemies already taken out, and the next try is a little easier.",
+              )}
+            </p>
+          </div>
+        )}
         {noGl && (
           <div className="crowd-overlay">
             <h2>{t("3D isn't available here")}</h2>
