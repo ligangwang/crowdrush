@@ -65,5 +65,11 @@
   "RATE+": "射速+",
   "DMG ×{0}": "伤害 ×{0}",
   "RATE +{0}": "射速 +{0}",
-  "Damage {0}, fire rate level {1}": "伤害 {0}，射速等级 {1}"
+  "Damage {0}, fire rate level {1}": "伤害 {0}，射速等级 {1}",
+  "Pause": "暂停",
+  "Paused": "已暂停",
+  "Resume": "继续",
+  "Restart level": "重开本关",
+  "Can't win? Restart": "打不过？重开",
+  "Restarting counts as a try: you keep coins for enemies already taken out, and the next try is a little easier.": "重开算一次尝试：已消灭敌人的金币照样拿，下一次敌人也会弱一点。"
 }

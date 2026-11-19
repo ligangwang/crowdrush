@@ -850,6 +850,29 @@ function lose(w: World) {
   w.events.push({ type: "lost" });
 }
 
+/** Ends a level in play as a loss, for a player who restarts it. */
+export function giveUp(w: World) {
+  if (w.phase === "run" || w.phase === "boss") lose(w);
+}
+
+/**
+ * Whether a boss fight looks lost, from the boss's health and the squad's
+ * size a few seconds apart: at that pace the squad would be gone well before
+ * the boss falls. The squad shrinks faster as it gets smaller and its fire
+ * weakens with it, so a straight-line guess errs toward hope.
+ */
+export function hopeless(
+  before: { hp: number; count: number },
+  now: { hp: number; count: number },
+) {
+  const lost = before.count - now.count;
+  if (lost <= 0 || now.hp <= 0) return false;
+  const dealt = before.hp - now.hp;
+  if (dealt <= 0) return true;
+  // seconds cancel out: compare in "windows" of the sample gap
+  return now.hp / dealt > (now.count / lost) * 1.5;
+}
+
 /** Whole damage, rounding a fraction up as often as it is large. */
 function roundDamage(w: World, dmg: number) {
   const whole = Math.floor(dmg);

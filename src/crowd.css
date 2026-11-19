@@ -110,6 +110,70 @@
 .crowd-hud button[aria-pressed="false"] {
   color: #b9c2cc;
 }
+.crowd-hud-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.crowd-hud .crowd-pause,
+.crowd-hud .crowd-pause[aria-pressed="false"] {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.crowd-pause-icon {
+  display: block;
+  width: 10px;
+  height: 12px;
+  border-left: 3.5px solid currentColor;
+  border-right: 3.5px solid currentColor;
+}
+.crowd-paused .crowd-pause-actions {
+  margin-bottom: 14px;
+}
+.crowd-overlay .crowd-pause-note {
+  font-size: 13px;
+  margin: 0;
+  color: #9aa6b8;
+}
+.crowd-giveup {
+  position: absolute;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  background: #c8322cf0;
+  border: 1px solid #ffffff55;
+  border-radius: 999px;
+  padding: 11px 20px;
+  min-height: 44px;
+  box-shadow: 0 8px 24px #0006;
+  cursor: pointer;
+  white-space: nowrap;
+  animation: crowd-giveup-in 0.35s ease-out;
+}
+.crowd-hud .crowd-pause[aria-pressed="true"] .crowd-pause-icon {
+  width: 0;
+  height: 0;
+  margin-left: 3px;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 11px solid currentColor;
+  border-right: 0;
+}
+@keyframes crowd-giveup-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+}
 .crowd-overlay {
   position: absolute;
   left: 50%;
