@@ -736,3 +736,59 @@
   color: #c4ccda;
   font-variant-numeric: tabular-nums;
 }
+
+/* Points for a finished level, and a friend's challenge. */
+.crowd-points {
+  margin: 4px 0 10px;
+}
+.crowd-points-total {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #ffd166;
+}
+.crowd-points-parts {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: #c4ccda;
+}
+.crowd-rival {
+  margin: 8px 0 0;
+  font-weight: 700;
+  color: #ffb4b6;
+}
+.crowd-rival.beaten {
+  color: #9be7a0;
+}
+.crowd-challenge .secondary-button {
+  margin-top: 10px;
+}
+.crowd-challenge-share {
+  margin: 12px 0 0;
+}
+.crowd-challenge-share p {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+}
+.crowd-challenge-link {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #ffffff33;
+  background: #0b1222;
+  color: #e8edf6;
+  font-size: 0.8rem;
+}
+
+/* The version, small in a corner. */
+.crowd-version {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}

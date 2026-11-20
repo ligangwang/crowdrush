@@ -38,6 +38,9 @@ import {
   tiersAt,
   WALL_HIT,
   type Perks,
+  points,
+  SPEED_POINTS,
+  BOSS_POINTS,
 } from "../src/crowd-core";
 
 /** A simple player: take the better gate, dodge walls, shoot what it can break. */
@@ -637,4 +640,52 @@ test("a boss fight is hopeless when the squad falls far faster than the boss", (
     false,
   );
   assert.equal(hopeless({ hp: 100, count: 50 }, { hp: 0, count: 10 }), false);
+});
+
+test("points add up soldiers left, monsters shot, the boss and a fast kill", () => {
+  const k = expectedTiers(10);
+  const w = play(10, autopilot, { power: k, rate: k, squad: k });
+  assert.equal(w.phase, "won");
+  const p = points(w);
+  assert.equal(p.soldiers, w.count * 10);
+  const shot = w.things.filter(
+    (t) => t.kind === "monster" && !t.minion && t.dead && t.hp <= 0,
+  ).length;
+  assert.equal(p.monsters, shot * 10);
+  assert.equal(p.boss, BOSS_POINTS);
+  assert.ok(p.speed > 0 && p.speed <= SPEED_POINTS, `speed ${p.speed}`);
+  assert.equal(p.total, p.soldiers + p.monsters + p.boss + p.speed);
+  // The same level played the same way scores the same.
+  assert.deepEqual(
+    points(play(10, autopilot, { power: k, rate: k, squad: k })),
+    p,
+  );
+});
+
+test("a lost run scores its monsters and boss damage, and minions never count", () => {
+  const w = play(1, (x) => steer(x, 0));
+  assert.equal(w.phase, "lost");
+  const p = points(w);
+  assert.equal(p.soldiers, 0);
+  assert.equal(p.speed, 0);
+  assert.equal(
+    p.boss,
+    Math.round((1 - w.boss.hp / w.boss.maxHp) * BOSS_POINTS),
+  );
+  const before = p.monsters;
+  for (const t of w.things)
+    if (t.kind === "monster") {
+      t.minion = true;
+      t.dead = true;
+      t.hp = 0;
+    }
+  assert.equal(points(w).monsters, 0);
+  assert.ok(before >= 0);
+});
+
+test("a slow boss kill earns no speed points", () => {
+  const k = expectedTiers(10);
+  const w = play(10, autopilot, { power: k, rate: k, squad: k });
+  w.bossAt = w.time - 25;
+  assert.equal(points(w).speed, 0);
 });

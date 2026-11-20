@@ -456,3 +456,149 @@ test("the pause menu is translated into Simplified Chinese", async () => {
   expect(screen.getByRole("button", { name: "继续" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "重开本关" })).toBeTruthy();
 });
+
+type Crowd = {
+  __crowd: {
+    current: {
+      level: number;
+      perks: { squad: number; power: number; rate: number };
+      boss: { hp: number };
+      coins: { taken: boolean }[];
+    };
+  };
+};
+const crowd = () => (window as unknown as Crowd).__crowd.current;
+
+test("a level's end shows its points, and a challenge link carries them with the rules", async () => {
+  const link = vi.fn(
+    async () => "https://dingn.com/play/crowdrush/?c=Xq3v9TzK1bWm",
+  );
+  sdk.challengeLink = link;
+  const roundEnded = vi.fn();
+  sdk.roundEnded = roundEnded;
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+  });
+  await play({ level: "3" });
+  const start = await screen.findByRole(
+    "button",
+    { name: "Start" },
+    { timeout: 5000 },
+  );
+  await act(async () => fireEvent.click(start));
+  // Half the boss beaten, then the squad falls.
+  crowd().boss.hp /= 2;
+  mocks.fall = true;
+  expect(
+    await screen.findByText("Squad wiped out", {}, { timeout: 3000 }),
+  ).toBeTruthy();
+  expect(roundEnded).toHaveBeenCalledTimes(1);
+  // No soldiers left, but half the boss's points.
+  expect(screen.getByText("500 points")).toBeTruthy();
+  expect(screen.getByText("Boss 500")).toBeTruthy();
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: /Challenge a friend/ })),
+  );
+  expect(link).toHaveBeenCalledWith({
+    mode: "level",
+    seed: "3",
+    score: 500,
+    unit: "points",
+    rules: "s0p0r0.t0",
+  });
+  expect(writeText).toHaveBeenCalledWith(
+    "Can you beat my 500 points in Crowd Rush? https://dingn.com/play/crowdrush/?c=Xq3v9TzK1bWm",
+  );
+  expect(screen.getByText("Link copied. Send it to a friend!")).toBeTruthy();
+});
+
+test("a friend's challenge opens their level with their upgrades, for points only", async () => {
+  fakeSdk(false);
+  const earn = vi.fn(async (coins: number) => ({ coins, left: 30 }));
+  sdk.rewards.earn = earn;
+  sdk.challenge = {
+    mode: "level",
+    seed: "12",
+    score: 4210,
+    unit: "points",
+    rules: "s3p2r1.t0",
+  };
+  await play({ level: "2", best: "1" });
+  // Straight to level 12, past the sign-in gate, with the friend's upgrades.
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "A friend scored 4,210 points. Can you beat it?" },
+      { timeout: 5000 },
+    ),
+  ).toBeTruthy();
+  expect(crowd().level).toBe(12);
+  expect(crowd().perks).toEqual({ squad: 3, power: 2, rate: 1 });
+  expect(
+    screen.getByText("This one is for points only: no coins or progress."),
+  ).toBeTruthy();
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "Start" })),
+  );
+  // No coin packs on a points-only road.
+  expect(crowd().coins.every((c) => c.taken)).toBe(true);
+  mocks.fall = true;
+  expect(
+    await screen.findByText(
+      /Your friend scored 4,210\. [\d,]+ more to beat it\./,
+      {},
+      { timeout: 3000 },
+    ),
+  ).toBeTruthy();
+  expect(earn).not.toHaveBeenCalled();
+  // Trying again keeps the challenge.
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "Try again" })),
+  );
+  expect(crowd().level).toBe(12);
+  expect(crowd().perks).toEqual({ squad: 3, power: 2, rate: 1 });
+  // A failed challenge doesn't ease the friend's level.
+  expect(screen.queryByText(/Try 2/)).toBeNull();
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "Start" })),
+  );
+  mocks.fall = true;
+  await screen.findByText("Squad wiped out", {}, { timeout: 3000 });
+  // Back to the player's own game: their level and upgrades.
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "Back to your game" })),
+  );
+  expect(crowd().level).toBe(2);
+  expect(crowd().perks).toEqual({ squad: 0, power: 0, rate: 0 });
+  expect(screen.getByRole("heading", { name: "Ready to rush?" })).toBeTruthy();
+  // Nothing was saved from the challenge.
+  expect(stored.get("level")).toBe("2");
+});
+
+test("a challenge without its rules, or for another game, is ignored", async () => {
+  for (const challenge of [
+    { mode: "level", seed: "4", score: 10, unit: "points" as const },
+    { mode: "daily", seed: "2026-11-20", score: 10, unit: "points" as const },
+  ]) {
+    fakeSdk(false);
+    sdk.challenge = challenge;
+    await play({ level: "2" });
+    expect(
+      await screen.findByRole(
+        "heading",
+        { name: "Ready to rush?" },
+        { timeout: 5000 },
+      ),
+    ).toBeTruthy();
+    expect(crowd().level).toBe(2);
+    cleanup();
+  }
+});
+
+test("the version shows small in a corner", async () => {
+  await play();
+  const { version } = await import("../game.json");
+  expect(screen.getByText(`v${version}`).className).toBe("crowd-version");
+});

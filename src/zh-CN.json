@@ -71,5 +71,22 @@
   "Resume": "继续",
   "Restart level": "重开本关",
   "Can't win? Restart": "打不过？重开",
-  "Restarting counts as a try: you keep coins for enemies already taken out, and the next try is a little easier.": "重开算一次尝试：已消灭敌人的金币照样拿，下一次敌人也会弱一点。"
+  "Restarting counts as a try: you keep coins for enemies already taken out, and the next try is a little easier.": "重开算一次尝试：已消灭敌人的金币照样拿，下一次敌人也会弱一点。",
+  "A friend scored {0} points. Can you beat it?": "朋友拿了 {0} 分，你能超过吗？",
+  "You play with your friend's upgrades, so it's a fair match.": "你用和朋友一样的升级，公平比拼。",
+  "This one is for points only: no coins or progress.": "这局只比分数：不得金币，也不计进度。",
+  "This one was for points only: no coins or progress.": "这局只比分数：不得金币，也不计进度。",
+  "Play your own game instead": "回到自己的游戏",
+  "Back to your game": "回到你的游戏",
+  "{0} points": "{0} 分",
+  "Soldiers {0}": "士兵 {0}",
+  "Monsters {0}": "怪物 {0}",
+  "Boss {0}": "首领 {0}",
+  "Speed {0}": "速度 {0}",
+  "You beat your friend's {0}!": "你超过了朋友的 {0} 分！",
+  "Your friend scored {0}. {1} more to beat it.": "朋友拿了 {0} 分，再多 {1} 分就能超过。",
+  "Can you beat my {0} points in Crowd Rush?": "我在人潮突击拿了 {0} 分，你能超过我吗？",
+  "Challenge a friend": "挑战好友",
+  "Link copied. Send it to a friend!": "链接已复制，发给朋友吧！",
+  "Challenge link": "挑战链接"
 }
