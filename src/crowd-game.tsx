@@ -26,14 +26,25 @@ import {
   volley,
   packSize,
   newLevel,
+  points,
   progress,
   stars,
   start,
   steer,
   step,
   type GameEvent,
+  type Points,
   type World,
 } from "./crowd-core";
+import {
+  beyond,
+  challengeFor,
+  readChallenge,
+  shareLink,
+  type Round,
+  type Rules,
+} from "./crowd-challenge";
+import { version } from "../game.json";
 import type { CrowdScene, SceneFx } from "./crowd-scene";
 import { createBadgeTracker, earnCoins, utcDay } from "./crowd-badges";
 import {
@@ -186,8 +197,15 @@ export function CrowdGame() {
   function dropPacks(w: World) {
     cappedRef.current = isCapped();
     setCapped(cappedRef.current);
-    if (cappedRef.current && uidRef.current)
-      for (const c of w.coins) c.taken = true;
+    // Packs soak up gunfire, so a friend's challenge has them exactly as the
+    // friend did, whatever pays out (a points-only round pays nothing).
+    const c = challenge.current;
+    const clear = c ? !c.rules.packs : cappedRef.current && !!uidRef.current;
+    if (clear) for (const pack of w.coins) pack.taken = true;
+    roundRules.current = {
+      ...roundRules.current,
+      packs: w.coins.some((pack) => !pack.taken),
+    };
   }
   // dingn coins picked up on the road this level.
   const [picked, setPicked] = useState(0);
@@ -198,6 +216,31 @@ export function CrowdGame() {
   const triesRef = useRef({ level: 0, n: 0 });
   const [tries, setTries] = useState(0);
   perksRef.current = perks;
+  // A friend's challenge the page opened with: their level, their points and
+  // the rules (upgrades and tries) they played under, which the player's
+  // level uses instead of their own until they go back to their own game.
+  const challenge = useRef<Round | null>(readChallenge(sdk.challenge));
+  const [friend, setFriend] = useState<Round | null>(challenge.current);
+  // The rules the level in play was built with, for a challenge made from it.
+  const roundRules = useRef<Rules>({
+    perks: { ...NO_PERKS },
+    tries: 0,
+    packs: true,
+  });
+  // The finished level's points, and the round to challenge a friend with.
+  const [score, setScore] = useState<Points | null>(null);
+  const [played, setPlayed] = useState<Round | null>(null);
+  /**
+   * Whether the level in play is a friend's challenge played for the points
+   * alone, paying, saving and easing nothing: one on a level the player
+   * hasn't reached, or with rules that give more than they have.
+   */
+  const scoreOnly = (lv: number) => {
+    const c = challenge.current;
+    return (
+      !!c && (lv > localProgress().level || beyond(c.rules, perksRef.current))
+    );
+  };
   const [buying, setBuying] = useState<UpgradeKind | null>(null);
   const [shopNote, setShopNote] = useState("");
   // The upgrade the player couldn't afford, shown as a notice on the panel.
@@ -219,7 +262,8 @@ export function CrowdGame() {
   // just now, since levels are sized for the upgrades the player owns.
   useEffect(() => {
     const w = world.current;
-    if (w.phase !== "ready") return;
+    // A friend's challenge keeps the friend's upgrades.
+    if (w.phase !== "ready" || challenge.current) return;
     const p = w.perks;
     if (
       p.power !== perks.power ||
@@ -249,7 +293,8 @@ export function CrowdGame() {
     else if (result.status === "failed")
       setShopNote(tRef.current("The upgrade shop is unavailable right now."));
   }
-  const locked = needsSignIn(level, !!user);
+  // A friend's challenge plays without an account, for the points.
+  const locked = needsSignIn(level, !!user) && !friend;
   const upgradeName = (kind: UpgradeKind) =>
     kind === "squad"
       ? t("Squad")
@@ -257,11 +302,32 @@ export function CrowdGame() {
         ? t("Power")
         : t("Fire rate");
 
+  /**
+   * A new world for level `lv`: under a friend's challenge's rules when it is
+   * their level, otherwise under the player's own (which ends the challenge).
+   */
+  function build(lv: number) {
+    const c = challenge.current?.level === lv ? challenge.current : null;
+    if (!c && challenge.current) {
+      challenge.current = null;
+      setFriend(null);
+    }
+    const tries = c
+      ? c.rules.tries
+      : triesRef.current.level === lv
+        ? triesRef.current.n
+        : 0;
+    const own = c ? c.rules.perks : perksRef.current;
+    roundRules.current = { perks: { ...own }, tries, packs: true };
+    const w = newLevel(lv, own, tries);
+    applyPerks(w, own);
+    return { w, tries };
+  }
+
   function load(lv: number) {
-    const tries = triesRef.current.level === lv ? triesRef.current.n : 0;
-    setTries(tries);
-    world.current = newLevel(lv, perksRef.current, tries);
-    applyPerks(world.current, perksRef.current);
+    const built = build(lv);
+    setTries(built.tries);
+    world.current = built.w;
     const f = fx.current;
     f.sparks = [];
     f.floats = [];
@@ -286,7 +352,10 @@ export function CrowdGame() {
     sfx.current?.wake();
     if (loadingRef.current) return;
     const w = world.current;
-    if (w.phase === "ready" && !needsSignIn(w.level, !!uidRef.current)) {
+    if (
+      w.phase === "ready" &&
+      (challenge.current || !needsSignIn(w.level, !!uidRef.current))
+    ) {
       dropPacks(w);
       start(w);
       setPhase("run");
@@ -306,6 +375,12 @@ export function CrowdGame() {
   }
   const next = () => load(world.current.level + 1);
   const retry = () => load(world.current.level);
+  /** Ends a friend's challenge: back to the player's own level and upgrades. */
+  function ownGame() {
+    challenge.current = null;
+    setFriend(null);
+    load(localProgress().level);
+  }
 
   /** Pauses (or resumes) a level in play. */
   function hold(on: boolean) {
@@ -346,9 +421,10 @@ export function CrowdGame() {
     setSound(s);
     sfx.current = new Sfx();
     sfx.current.on = s;
-    world.current = newLevel(saved, perksRef.current);
-    applyPerks(world.current, perksRef.current);
-    setLevel(saved);
+    // A friend's challenge link opens on their level.
+    const first = challenge.current?.level ?? saved;
+    world.current = build(first).w;
+    setLevel(first);
     if (import.meta.env.DEV)
       (window as unknown as { __crowd?: typeof world }).__crowd = world;
 
@@ -456,7 +532,8 @@ export function CrowdGame() {
         if (merged.best > 0)
           void badges.current?.cleared(sdkRef.current, merged.best, 0);
         const w = world.current;
-        if (w.phase === "ready" && w.level < merged.level) load(merged.level);
+        if (w.phase === "ready" && w.level < merged.level && !challenge.current)
+          load(merged.level);
         if (!sameProgress(merged, remote))
           return saveCrowdProgress(sdk, merged);
       })
@@ -499,9 +576,23 @@ export function CrowdGame() {
         f.held = false;
         setHeld(false);
       }
+      if (w.phase === "won" || w.phase === "lost") {
+        sdkRef.current.roundEnded?.();
+        const pts = points(w);
+        setScore(pts);
+        setPlayed({
+          level: w.level,
+          score: pts.total,
+          rules: roundRules.current,
+        });
+      }
       if (w.phase === "lost") lost(w);
-      if (w.phase === "won") {
-        triesRef.current = { level: 0, n: 0 };
+      if (w.phase === "won" && scoreOnly(w.level)) {
+        setResult({ count: w.count, stars: stars(w) });
+        setPrize({ coins: null, limit: false });
+      } else if (w.phase === "won") {
+        // A challenge's tries are the friend's, so the player's stay.
+        if (!challenge.current) triesRef.current = { level: 0, n: 0 };
         setResult({ count: w.count, stars: stars(w) });
         const coins = levelCoins(w);
         setPrize({ coins: null, limit: false });
@@ -548,14 +639,22 @@ export function CrowdGame() {
    * the share of enemies destroyed.
    */
   function lost(w: World) {
-    const tr = triesRef.current;
-    triesRef.current = {
-      level: w.level,
-      n: tr.level === w.level ? tr.n + 1 : 1,
-    };
+    // A challenge's tries are the friend's, so the player's stay.
+    if (!challenge.current) {
+      const tr = triesRef.current;
+      triesRef.current = {
+        level: w.level,
+        n: tr.level === w.level ? tr.n + 1 : 1,
+      };
+    }
     const coins = levelCoins(w);
     setLoss({ share: defeated(w), coins: null, limit: false });
-    if (coins > 0 && uidRef.current && !cappedRef.current)
+    if (
+      coins > 0 &&
+      uidRef.current &&
+      !cappedRef.current &&
+      !scoreOnly(w.level)
+    )
       earnCoins(sdkRef.current.rewards, coins)
         .then(({ paid, spent }) => {
           setLoss((l) => ({ ...l, coins: paid, limit: spent }));
@@ -1035,6 +1134,7 @@ export function CrowdGame() {
               </span>
             )}
             {!(capped && user) &&
+              !(friend && scoreOnly(level)) &&
               (picked > 0 || phase === "run" || phase === "boss") && (
                 <span
                   ref={walletRef}
@@ -1175,179 +1275,223 @@ export function CrowdGame() {
               </div>
             </div>
           )}
-        {!noGl && loading === null && phase === "ready" && !locked && (
-          <div className="crowd-overlay">
+        {!noGl && loading === null && phase === "ready" && friend && (
+          <div className="crowd-overlay crowd-challenge">
             <p className="eyebrow">{t(`Level ${level}`)}</p>
-            <h2>{t("Ready to rush?")}</h2>
-            {(() => {
-              const due = expectedTiers(level);
-              const behind = UPGRADE_KINDS.some((k) => perks[k] < due);
-              return (
-                behind && (
-                  <p className="crowd-upgrade-due">
-                    {t(`This level expects upgrades at level ${due}`)}
-                  </p>
-                )
-              );
-            })()}
-            {tries > 0 && (
+            <h2>
+              {friend.mine
+                ? t(
+                    `Your score to beat: ${friend.score.toLocaleString("en-US")} points`,
+                  )
+                : t(
+                    `A friend scored ${friend.score.toLocaleString("en-US")} points. Can you beat it?`,
+                  )}
+            </h2>
+            <p>
+              {friend.mine
+                ? t("You play with the upgrades you had then.")
+                : t(
+                    "You play with your friend's upgrades, so it's a fair match.",
+                  )}
+            </p>
+            {scoreOnly(level) && (
               <p className="crowd-retry-ease">
-                {t(
-                  `Try ${tries + 1}: enemies ${Math.round(retryEase(tries) * 100)}% weaker`,
-                )}
+                {t("This one is for points only: no coins or progress.")}
               </p>
             )}
             <button type="button" className="button" onClick={begin}>
               {t("Start")}
             </button>
-            {/* Signed-out players see the upgrades too; buying asks them
-                to sign in first, since coins belong to a dingn account. */}
-            <div className="crowd-shop" role="group" aria-label={t("Upgrades")}>
-              <p className="crowd-shop-title">
-                {t("Upgrades")}
-                <span>
-                  {user
-                    ? t("Permanent, paid with dingn coins")
-                    : t("Sign in to buy with dingn coins")}
-                </span>
-              </p>
-              {UPGRADE_KINDS.map((kind) => {
-                const next = nextUpgrade(kind, perks, level);
-                const locked = next?.unlocks ?? null;
-                const name = upgradeName(kind);
-                const pct = (tier: number) =>
-                  Math.round(
-                    (kind === "power" ? critChance(tier) : RATE_PERK * tier) *
-                      100,
-                  );
-                const label =
-                  kind === "squad"
-                    ? t("Soldiers at the start")
-                    : kind === "power"
-                      ? t("2× damage chance")
-                      : t("Fire speed");
-                const value = (tier: number) =>
-                  kind === "squad"
-                    ? String(startCount({ ...NO_PERKS, squad: tier }))
-                    : kind === "power"
-                      ? `${pct(tier)}%`
-                      : `+${pct(tier)}%`;
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={ownGame}
+            >
+              {t("Play your own game instead")}
+            </button>
+          </div>
+        )}
+        {!noGl &&
+          loading === null &&
+          phase === "ready" &&
+          !locked &&
+          !friend && (
+            <div className="crowd-overlay">
+              <p className="eyebrow">{t(`Level ${level}`)}</p>
+              <h2>{t("Ready to rush?")}</h2>
+              {(() => {
+                const due = expectedTiers(level);
+                const behind = UPGRADE_KINDS.some((k) => perks[k] < due);
                 return (
-                  <div
-                    key={kind}
-                    className={`crowd-shop-row${next && !locked ? " can-buy" : ""}`}
-                    // the whole row upgrades too; the button is for keyboards
-                    onClick={() => next && !locked && void buy(kind)}
-                  >
-                    <span className={`crowd-shop-icon ${kind}`} aria-hidden />
-                    <span className="crowd-shop-info">
-                      <span className="crowd-shop-name">
-                        {name}
-                        <span
-                          className="crowd-shop-tiers"
-                          aria-label={t(`Level ${perks[kind]} of ${TIERS}`)}
-                        >
-                          {Array.from({ length: TIERS }, (_, i) => (
-                            <i
-                              key={i}
-                              className={i < perks[kind] ? "on" : ""}
-                            />
-                          ))}
+                  behind && (
+                    <p className="crowd-upgrade-due">
+                      {t(`This level expects upgrades at level ${due}`)}
+                    </p>
+                  )
+                );
+              })()}
+              {tries > 0 && (
+                <p className="crowd-retry-ease">
+                  {t(
+                    `Try ${tries + 1}: enemies ${Math.round(retryEase(tries) * 100)}% weaker`,
+                  )}
+                </p>
+              )}
+              <button type="button" className="button" onClick={begin}>
+                {t("Start")}
+              </button>
+              {/* Signed-out players see the upgrades too; buying asks them
+                to sign in first, since coins belong to a dingn account. */}
+              <div
+                className="crowd-shop"
+                role="group"
+                aria-label={t("Upgrades")}
+              >
+                <p className="crowd-shop-title">
+                  {t("Upgrades")}
+                  <span>
+                    {user
+                      ? t("Permanent, paid with dingn coins")
+                      : t("Sign in to buy with dingn coins")}
+                  </span>
+                </p>
+                {UPGRADE_KINDS.map((kind) => {
+                  const next = nextUpgrade(kind, perks, level);
+                  const locked = next?.unlocks ?? null;
+                  const name = upgradeName(kind);
+                  const pct = (tier: number) =>
+                    Math.round(
+                      (kind === "power" ? critChance(tier) : RATE_PERK * tier) *
+                        100,
+                    );
+                  const label =
+                    kind === "squad"
+                      ? t("Soldiers at the start")
+                      : kind === "power"
+                        ? t("2× damage chance")
+                        : t("Fire speed");
+                  const value = (tier: number) =>
+                    kind === "squad"
+                      ? String(startCount({ ...NO_PERKS, squad: tier }))
+                      : kind === "power"
+                        ? `${pct(tier)}%`
+                        : `+${pct(tier)}%`;
+                  return (
+                    <div
+                      key={kind}
+                      className={`crowd-shop-row${next && !locked ? " can-buy" : ""}`}
+                      // the whole row upgrades too; the button is for keyboards
+                      onClick={() => next && !locked && void buy(kind)}
+                    >
+                      <span className={`crowd-shop-icon ${kind}`} aria-hidden />
+                      <span className="crowd-shop-info">
+                        <span className="crowd-shop-name">
+                          {name}
+                          <span
+                            className="crowd-shop-tiers"
+                            aria-label={t(`Level ${perks[kind]} of ${TIERS}`)}
+                          >
+                            {Array.from({ length: TIERS }, (_, i) => (
+                              <i
+                                key={i}
+                                className={i < perks[kind] ? "on" : ""}
+                              />
+                            ))}
+                          </span>
+                        </span>
+                        <span className="crowd-shop-effect">
+                          {label}{" "}
+                          {next ? (
+                            <>
+                              {perks[kind] > 0 && (
+                                <>
+                                  {value(perks[kind])}
+                                  <b aria-hidden> → </b>
+                                </>
+                              )}
+                              <em>{value(next.tier)}</em>
+                            </>
+                          ) : (
+                            <em>{value(perks[kind])}</em>
+                          )}
                         </span>
                       </span>
-                      <span className="crowd-shop-effect">
-                        {label}{" "}
-                        {next ? (
-                          <>
-                            {perks[kind] > 0 && (
-                              <>
-                                {value(perks[kind])}
-                                <b aria-hidden> → </b>
-                              </>
+                      {locked ? (
+                        <span className="crowd-shop-locked">
+                          <span aria-hidden>🔒</span>{" "}
+                          {t(`Unlocks at level ${locked}`)}
+                        </span>
+                      ) : next ? (
+                        <button
+                          type="button"
+                          className={`crowd-shop-buy${poor?.kind === kind ? " poor" : ""}`}
+                          disabled={!!buying}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void buy(kind);
+                          }}
+                          aria-label={
+                            user
+                              ? t(
+                                  `Buy ${name} +${next.tier} for ${next.price} coins`,
+                                )
+                              : t(`Sign in to buy ${name} +${next.tier}`)
+                          }
+                        >
+                          <span className="crowd-shop-buy-label">
+                            <span aria-hidden>▲</span> {t("Upgrade")}
+                          </span>
+                          <span className="crowd-shop-buy-price">
+                            <span className="crowd-coin" aria-hidden />
+                            {next.price}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="crowd-shop-max">{t("Max")}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {poor && (
+                  <div className="crowd-shop-poor" role="alert">
+                    <span className="crowd-shop-poor-icon" aria-hidden>
+                      <span className="crowd-coin" />
+                    </span>
+                    <span className="crowd-shop-poor-text">
+                      <strong>{t("Not enough coins")}</strong>
+                      <span>
+                        {t(
+                          `${upgradeName(poor.kind)} +${poor.tier} costs ${poor.price} coins.`,
+                        )}
+                      </span>
+                      {poor.balance !== undefined &&
+                        poor.balance < poor.price && (
+                          <span className="crowd-shop-poor-gap">
+                            {t(
+                              `You have ${poor.balance}, so you need ${poor.price - poor.balance} more.`,
                             )}
-                            <em>{value(next.tier)}</em>
-                          </>
-                        ) : (
-                          <em>{value(perks[kind])}</em>
+                          </span>
+                        )}
+                      <span>
+                        {t(
+                          "Earn more by clearing levels, shooting open coin packs on the road, and taking out enemies even when a level fails.",
                         )}
                       </span>
                     </span>
-                    {locked ? (
-                      <span className="crowd-shop-locked">
-                        <span aria-hidden>🔒</span>{" "}
-                        {t(`Unlocks at level ${locked}`)}
-                      </span>
-                    ) : next ? (
-                      <button
-                        type="button"
-                        className={`crowd-shop-buy${poor?.kind === kind ? " poor" : ""}`}
-                        disabled={!!buying}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void buy(kind);
-                        }}
-                        aria-label={
-                          user
-                            ? t(
-                                `Buy ${name} +${next.tier} for ${next.price} coins`,
-                              )
-                            : t(`Sign in to buy ${name} +${next.tier}`)
-                        }
-                      >
-                        <span className="crowd-shop-buy-label">
-                          <span aria-hidden>▲</span> {t("Upgrade")}
-                        </span>
-                        <span className="crowd-shop-buy-price">
-                          <span className="crowd-coin" aria-hidden />
-                          {next.price}
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="crowd-shop-max">{t("Max")}</span>
-                    )}
+                    <button
+                      type="button"
+                      className="crowd-shop-poor-close"
+                      onClick={() => setPoor(null)}
+                      aria-label={t("Close")}
+                    >
+                      ×
+                    </button>
                   </div>
-                );
-              })}
-              {poor && (
-                <div className="crowd-shop-poor" role="alert">
-                  <span className="crowd-shop-poor-icon" aria-hidden>
-                    <span className="crowd-coin" />
-                  </span>
-                  <span className="crowd-shop-poor-text">
-                    <strong>{t("Not enough coins")}</strong>
-                    <span>
-                      {t(
-                        `${upgradeName(poor.kind)} +${poor.tier} costs ${poor.price} coins.`,
-                      )}
-                    </span>
-                    {poor.balance !== undefined &&
-                      poor.balance < poor.price && (
-                        <span className="crowd-shop-poor-gap">
-                          {t(
-                            `You have ${poor.balance}, so you need ${poor.price - poor.balance} more.`,
-                          )}
-                        </span>
-                      )}
-                    <span>
-                      {t(
-                        "Earn more by clearing levels, shooting open coin packs on the road, and taking out enemies even when a level fails.",
-                      )}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    className="crowd-shop-poor-close"
-                    onClick={() => setPoor(null)}
-                    aria-label={t("Close")}
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-              {shopNote && <p className="crowd-shop-note">{shopNote}</p>}
+                )}
+                {shopNote && <p className="crowd-shop-note">{shopNote}</p>}
+              </div>
             </div>
-          </div>
-        )}
+          )}
         {phase === "won" && showWin && (
           <div className="crowd-overlay">
             <p
@@ -1359,7 +1503,13 @@ export function CrowdGame() {
             </p>
             <h2>{t("Boss down!")}</h2>
             <p>{t(`${result.count} of your squad made it.`)}</p>
-            {(prize.coins || prize.limit || !user) && (
+            <Score score={score} friend={friend} />
+            {friend && scoreOnly(level) && (
+              <p className="crowd-loss-note">
+                {t("This one was for points only: no coins or progress.")}
+              </p>
+            )}
+            {(prize.coins || prize.limit || (!user && !friend)) && (
               <p className="crowd-loss">
                 {prize.coins != null && prize.coins > 0 && (
                   <span className="crowd-loss-coins">
@@ -1388,7 +1538,7 @@ export function CrowdGame() {
                 )}
               </p>
             )}
-            {needsSignIn(level + 1, !!user) && (
+            {needsSignIn(level + 1, !!user) && !friend && (
               <p>
                 {t(
                   "Next up: sign in to save your progress and keep playing on any device.",
@@ -1396,22 +1546,46 @@ export function CrowdGame() {
               </p>
             )}
             <div className="crowd-actions">
-              <button type="button" className="button" onClick={next}>
-                {t("Next level →")}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={retry}
-              >
-                {t("Replay")}
-              </button>
+              {friend ? (
+                <>
+                  <button type="button" className="button" onClick={ownGame}>
+                    {t("Back to your game")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={retry}
+                  >
+                    {t("Try again")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="button" onClick={next}>
+                    {t("Next level →")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={retry}
+                  >
+                    {t("Replay")}
+                  </button>
+                </>
+              )}
             </div>
+            {played && <ChallengeButton played={played} />}
           </div>
         )}
         {phase === "lost" && (
           <div className="crowd-overlay">
             <h2>{t("Squad wiped out")}</h2>
+            <Score score={score} friend={friend} />
+            {friend && scoreOnly(level) && (
+              <p className="crowd-loss-note">
+                {t("This one was for points only: no coins or progress.")}
+              </p>
+            )}
             {(loss.share > 0 || picked > 0) && (
               <p className="crowd-loss">
                 {loss.share > 0 &&
@@ -1438,16 +1612,19 @@ export function CrowdGame() {
                     </button>
                   </span>
                 )}
-                {!user && levelCoins(world.current) > 0 && (
+                {!user && !friend && levelCoins(world.current) > 0 && (
                   <span className="crowd-loss-note">
                     {t("Sign in to earn coins for that.")}
                   </span>
                 )}
-                {user && !capped && levelCoins(world.current) === 0 && (
-                  <span className="crowd-loss-note">
-                    {t("Take out 20% to earn a coin.")}
-                  </span>
-                )}
+                {user &&
+                  !capped &&
+                  !scoreOnly(level) &&
+                  levelCoins(world.current) === 0 && (
+                    <span className="crowd-loss-note">
+                      {t("Take out 20% to earn a coin.")}
+                    </span>
+                  )}
               </p>
             )}
             <p>
@@ -1455,12 +1632,124 @@ export function CrowdGame() {
                 "Pick the bigger gate and shoot the crates for extra recruits.",
               )}
             </p>
-            <button type="button" className="button" onClick={retry}>
-              {t("Try again")}
-            </button>
+            <div className="crowd-actions">
+              <button type="button" className="button" onClick={retry}>
+                {t("Try again")}
+              </button>
+              {friend && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={ownGame}
+                >
+                  {t("Back to your game")}
+                </button>
+              )}
+            </div>
+            {played && <ChallengeButton played={played} />}
           </div>
         )}
+        {/* The version, small in a corner, for telling which build a player has. */}
+        <p className="crowd-version">v{version}</p>
       </div>
+    </div>
+  );
+}
+
+/** A finished level's points, what they came from, and the friend's to beat. */
+function Score({
+  score,
+  friend,
+}: {
+  score: Points | null;
+  friend: Round | null;
+}) {
+  const { t } = useLocale();
+  if (!score) return null;
+  const n = (v: number) => v.toLocaleString("en-US");
+  const parts = [
+    score.soldiers && t(`Soldiers ${n(score.soldiers)}`),
+    score.monsters && t(`Monsters ${n(score.monsters)}`),
+    score.boss && t(`Boss ${n(score.boss)}`),
+    score.speed && t(`Speed ${n(score.speed)}`),
+  ].filter(Boolean);
+  return (
+    <div className="crowd-points">
+      <p className="crowd-points-total">{t(`${n(score.total)} points`)}</p>
+      {parts.length > 0 && (
+        <p className="crowd-points-parts">{parts.join(" · ")}</p>
+      )}
+      {friend && (
+        <p
+          className={`crowd-rival${score.total > friend.score ? " beaten" : ""}`}
+        >
+          {score.total > friend.score
+            ? friend.mine
+              ? t(`You beat your own ${n(friend.score)}!`)
+              : t(`You beat your friend's ${n(friend.score)}!`)
+            : friend.mine
+              ? t(
+                  `Your score to beat: ${n(friend.score)}. ${n(friend.score - score.total + 1)} more to beat it.`,
+                )
+              : t(
+                  `Your friend scored ${n(friend.score)}. ${n(friend.score - score.total + 1)} more to beat it.`,
+                )}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Challenge a friend": a link to this level with the points to beat, through
+ * the phone's share sheet or copied, or shown to copy by hand.
+ */
+function ChallengeButton({ played }: { played: Round }) {
+  const { t } = useLocale();
+  const sdk = useDingn();
+  const [state, setState] = useState<
+    "idle" | "busy" | "copied" | "shared" | "unavailable"
+  >("idle");
+  const [link, setLink] = useState("");
+  async function send() {
+    setState("busy");
+    let url: string;
+    try {
+      url = await sdk.challengeLink(challengeFor(played));
+    } catch {
+      setState("unavailable");
+      return;
+    }
+    const text = t(
+      `Can you beat my ${played.score.toLocaleString("en-US")} points in Crowd Rush?`,
+    );
+    const how = await shareLink(url, text);
+    if (how === "failed") setLink(url);
+    setState(
+      how === "copied" ? "copied" : how === "shared" ? "shared" : "idle",
+    );
+  }
+  if (state === "unavailable") return null;
+  return (
+    <div className="crowd-challenge-share">
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={send}
+        disabled={state === "busy"}
+      >
+        ⚔ {t("Challenge a friend")}
+      </button>
+      {state === "copied" && <p>{t("Link copied. Send it to a friend!")}</p>}
+      {link && (
+        <input
+          className="crowd-challenge-link"
+          readOnly
+          value={link}
+          aria-label={t("Challenge link")}
+          onFocus={(e) => e.target.select()}
+        />
+      )}
     </div>
   );
 }

@@ -2,12 +2,7 @@ export declare const PROTOCOL: 1;
 export type Locale = "en" | "zh-CN";
 export type Player = { signedIn: boolean; name: string; avatar: string };
 export type Json =
-  | null
-  | boolean
-  | number
-  | string
-  | Json[]
-  | { [key: string]: Json };
+  null | boolean | number | string | Json[] | { [key: string]: Json };
 export type BadgeTier = "bronze" | "silver" | "gold" | "diamond";
 /** A badge from the game's game.json, in the player's language. */
 export type Badge = {
@@ -57,13 +52,7 @@ export type Earning = {
 };
 /** What a score is counted in, so dingn can word a challenge in both languages. */
 export type ChallengeUnit =
-  | "points"
-  | "digits"
-  | "cards"
-  | "levels"
-  | "stars"
-  | "words"
-  | "coins";
+  "points" | "digits" | "cards" | "levels" | "stars" | "words" | "coins";
 /**
  * A score for a friend to beat. `mode` (1-24 lowercase letters, digits or
  * dashes) and `seed` (1-32 letters, digits or dashes, such as a day) tell the
@@ -75,6 +64,19 @@ export type Challenge = {
   /** A whole number from 0 to 1,000,000,000. */
   score: number;
   unit: ChallengeUnit;
+  /**
+   * The rules the round was played with, in the game's own terms (1-64
+   * letters, digits, dots, dashes or underscores), such as the upgrades and
+   * helpers the player had, so the friend can play under exactly the same
+   * ones. dingn saves it with the challenge and gives it back unchanged.
+   */
+  rules?: string;
+  /**
+   * In `dingn.challenge` only: true when the player opening the link is the
+   * one who made it (signed in to the same account, or in the same browser).
+   * Then it is their own score to beat, not a friend's.
+   */
+  mine?: boolean;
 };
 export type DingnGame = {
   gameId: string;

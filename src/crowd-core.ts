@@ -153,6 +153,8 @@ export type World = {
   perks: Perks;
   fireClock: number;
   time: number;
+  /** When the boss fight began (w.time), or -1 before it. */
+  bossAt: number;
   shotsFired: number;
   events: GameEvent[];
   random: () => number;
@@ -731,6 +733,7 @@ export function newLevel(
     perks: { ...perks },
     fireClock: 0,
     time: 0,
+    bossAt: -1,
     shotsFired: 0,
     events: [],
     random,
@@ -895,7 +898,10 @@ export function step(w: World, dt: number) {
   const prevZ = w.z;
   if (w.phase === "run") {
     w.z = Math.min(w.z + w.speed * dt, w.boss.z - BOSS_STOP);
-    if (w.z >= w.boss.z - BOSS_STOP) w.phase = "boss";
+    if (w.z >= w.boss.z - BOSS_STOP) {
+      w.phase = "boss";
+      w.bossAt = w.time;
+    }
   }
 
   // rival squads march toward you once they're close
@@ -1193,3 +1199,51 @@ export const winCoins = (stars: number) =>
  */
 export const levelCoins = (w: World) =>
   w.picked + (w.phase === "won" ? winCoins(stars(w)) : lossCoins(w));
+
+/** Points for each soldier left at the end of a cleared level. */
+export const SOLDIER_POINTS = 10;
+/** Points for each monster on the road shot down (not the boss's minions). */
+export const MONSTER_POINTS = 10;
+/** Points for the boss: all of them for the kill, a share for its damage. */
+export const BOSS_POINTS = 1000;
+/** The most a quick boss kill adds, falling to none at SPEED_SECONDS. */
+export const SPEED_POINTS = 500;
+export const SPEED_SECONDS = 20;
+export type Points = {
+  soldiers: number;
+  monsters: number;
+  boss: number;
+  speed: number;
+  total: number;
+};
+
+/**
+ * A finished level's points, to compare with a friend's on the same level:
+ * soldiers left (the most of it, so keeping the squad alive matters most),
+ * road monsters shot down, damage to the boss, and a bonus for beating the
+ * boss fast. A lost run still scores its monsters and boss damage. Minions
+ * don't count, so a long boss fight can't be farmed for points.
+ */
+export function points(w: World): Points {
+  const won = w.phase === "won";
+  const soldiers = won ? w.count * SOLDIER_POINTS : 0;
+  const monsters =
+    w.things.filter(
+      (t) => t.kind === "monster" && !t.minion && t.dead && t.hp <= 0,
+    ).length * MONSTER_POINTS;
+  const boss = Math.round(
+    Math.max(0, Math.min(1, 1 - w.boss.hp / Math.max(1, w.boss.maxHp))) *
+      BOSS_POINTS,
+  );
+  const fight = w.bossAt < 0 ? SPEED_SECONDS : w.time - w.bossAt;
+  const speed = won
+    ? Math.round(SPEED_POINTS * Math.max(0, 1 - fight / SPEED_SECONDS))
+    : 0;
+  return {
+    soldiers,
+    monsters,
+    boss,
+    speed,
+    total: soldiers + monsters + boss + speed,
+  };
+}
