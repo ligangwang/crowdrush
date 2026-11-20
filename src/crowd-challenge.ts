@@ -4,15 +4,21 @@
 // beat it?"); following it opens Crowd Rush on that level.
 //
 // Every level is laid out the same for everyone (newLevel is seeded), but it
-// is sized for the player's upgrades and eased after failed tries. So a
-// challenge also carries the rules it was played with: the upgrade tiers and
-// the tries. The friend plays the level under exactly those rules, whatever
-// they own themselves, so the two scores are fair to compare.
+// is sized for the player's upgrades, eased after failed tries, and its coin
+// packs (which soak up gunfire) are cleared once a player's daily coins are
+// in. So a challenge also carries the rules it was played with: the upgrade
+// tiers, the tries and whether the coin packs were on the road. The friend
+// plays the level under exactly those rules, whatever they own themselves,
+// so the two scores are fair to compare.
 import type { Challenge } from "../sdk/dingn-sdk.js";
 import { MAX_TIER, NO_PERKS, type Perks } from "./crowd-core";
 
-/** The upgrade tiers a level was played with, and how many tries had eased it. */
-export type Rules = { perks: Perks; tries: number };
+/**
+ * The upgrade tiers a level was played with, how many tries had eased it
+ * (at most MAX_TRIES, where the easing stops), and whether its coin packs
+ * were on the road.
+ */
+export type Rules = { perks: Perks; tries: number; packs: boolean };
 /** Tries ease a level up to the fifth (retryEase). */
 export const MAX_TRIES = 5;
 /** The highest level a challenge can name. */
@@ -30,18 +36,25 @@ export type Round = {
   mine?: boolean;
 };
 
-/** Rules as dingn keeps them: "s", "p" and "r" tiers, then the tries, e.g. "s3p2r1.t0". */
+/**
+ * Rules as dingn keeps them: "s", "p" and "r" tiers, the tries and the coin
+ * packs (1 on the road, 0 cleared), e.g. "s3p2r1.t0.c1".
+ */
 export const writeRules = (r: Rules) =>
-  `s${r.perks.squad}p${r.perks.power}r${r.perks.rate}.t${r.tries}`;
+  `s${r.perks.squad}p${r.perks.power}r${r.perks.rate}.t${Math.min(r.tries, MAX_TRIES)}.c${r.packs ? 1 : 0}`;
 
 /** Rules written by writeRules, or null for anything else. */
 export function readRules(text: string | undefined): Rules | null {
-  const m = /^s(\d{1,2})p(\d{1,2})r(\d{1,2})\.t(\d)$/.exec(text ?? "");
+  const m = /^s(\d{1,2})p(\d{1,2})r(\d{1,2})\.t(\d)\.c([01])$/.exec(text ?? "");
   if (!m) return null;
-  const [squad, power, rate, tries] = m.slice(1).map(Number);
+  const [squad, power, rate, tries, packs] = m.slice(1).map(Number);
   if ([squad, power, rate].some((t) => t > MAX_TIER) || tries > MAX_TRIES)
     return null;
-  return { perks: { ...NO_PERKS, squad, power, rate }, tries };
+  return {
+    perks: { ...NO_PERKS, squad, power, rate },
+    tries,
+    packs: packs === 1,
+  };
 }
 
 /**

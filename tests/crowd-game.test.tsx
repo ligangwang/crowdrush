@@ -506,7 +506,7 @@ test("a level's end shows its points, and a challenge link carries them with the
     seed: "3",
     score: 500,
     unit: "points",
-    rules: "s0p0r0.t0",
+    rules: "s0p0r0.t0.c1",
   });
   expect(writeText).toHaveBeenCalledWith(
     "Can you beat my 500 points in Crowd Rush? https://dingn.com/play/crowdrush/?c=Xq3v9TzK1bWm",
@@ -515,7 +515,7 @@ test("a level's end shows its points, and a challenge link carries them with the
 });
 
 test("a friend's challenge opens their level with their upgrades, for points only", async () => {
-  fakeSdk(false);
+  fakeSdk(true);
   const earn = vi.fn(async (coins: number) => ({ coins, left: 30 }));
   sdk.rewards.earn = earn;
   sdk.challenge = {
@@ -523,8 +523,10 @@ test("a friend's challenge opens their level with their upgrades, for points onl
     seed: "12",
     score: 4210,
     unit: "points",
-    rules: "s3p2r1.t0",
+    rules: "s3p2r1.t0.c1",
   };
+  // Signed in, but with no upgrades, so the friend's are more than theirs.
+  sdk.rewards.shop = async () => [];
   await play({ level: "2", best: "1" });
   // Straight to level 12, past the sign-in gate, with the friend's upgrades.
   expect(
@@ -542,8 +544,11 @@ test("a friend's challenge opens their level with their upgrades, for points onl
   await act(async () =>
     fireEvent.click(screen.getByRole("button", { name: "Start" })),
   );
-  // No coin packs on a points-only road.
-  expect(crowd().coins.every((c) => c.taken)).toBe(true);
+  // The coin packs stay, as the friend had them, but nothing is paid.
+  expect(crowd().coins.some((c) => !c.taken)).toBe(true);
+  expect(screen.queryByLabelText(/coins picked up/)).toBeNull();
+  // Half the boss beaten, which a normal loss would pay for.
+  crowd().boss.hp /= 2;
   mocks.fall = true;
   expect(
     await screen.findByText(
@@ -610,7 +615,7 @@ test("the player's own challenge is their score to beat", async () => {
     seed: "2",
     score: 900,
     unit: "points",
-    rules: "s0p0r0.t0",
+    rules: "s0p0r0.t0.c1",
     mine: true,
   };
   await play({ level: "3", best: "2" });
@@ -636,3 +641,57 @@ test("the player's own challenge is their score to beat", async () => {
     ),
   ).toBeTruthy();
 });
+
+test(
+  "coin packs are on a challenge's road exactly when they were on the friend's",
+  { timeout: 20000 },
+  async () => {
+    // The friend had collected their daily coins, so their road had none.
+    sdk.challenge = {
+      mode: "level",
+      seed: "2",
+      score: 900,
+      unit: "points",
+      rules: "s0p0r0.t0.c0",
+    };
+    await play({ level: "2" });
+    const start = await screen.findByRole(
+      "button",
+      { name: "Start" },
+      { timeout: 5000 },
+    );
+    await act(async () => fireEvent.click(start));
+    expect(crowd().coins.every((c) => c.taken)).toBe(true);
+    cleanup();
+    // A player whose daily coins are in shares a road without packs.
+    fakeSdk(true);
+    const link = vi.fn(
+      async () => "https://dingn.com/play/crowdrush/?c=Xq3v9TzK1bWm",
+    );
+    sdk.challengeLink = link;
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn(async () => {}) },
+      configurable: true,
+    });
+    await play({
+      level: "3",
+      coinsDone: new Date().toISOString().slice(0, 10),
+    });
+    const again = await screen.findByRole(
+      "button",
+      { name: "Start" },
+      { timeout: 5000 },
+    );
+    await act(async () => fireEvent.click(again));
+    mocks.fall = true;
+    await screen.findByText("Squad wiped out", {}, { timeout: 3000 });
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole("button", { name: /Challenge a friend/ }),
+      ),
+    );
+    expect(link).toHaveBeenCalledWith(
+      expect.objectContaining({ rules: "s0p0r0.t0.c0" }),
+    );
+  },
+);

@@ -197,8 +197,15 @@ export function CrowdGame() {
   function dropPacks(w: World) {
     cappedRef.current = isCapped();
     setCapped(cappedRef.current);
-    if ((cappedRef.current && uidRef.current) || scoreOnly(w.level))
-      for (const c of w.coins) c.taken = true;
+    // Packs soak up gunfire, so a friend's challenge has them exactly as the
+    // friend did, whatever pays out (a points-only round pays nothing).
+    const c = challenge.current;
+    const clear = c ? !c.rules.packs : cappedRef.current && !!uidRef.current;
+    if (clear) for (const pack of w.coins) pack.taken = true;
+    roundRules.current = {
+      ...roundRules.current,
+      packs: w.coins.some((pack) => !pack.taken),
+    };
   }
   // dingn coins picked up on the road this level.
   const [picked, setPicked] = useState(0);
@@ -215,7 +222,11 @@ export function CrowdGame() {
   const challenge = useRef<Round | null>(readChallenge(sdk.challenge));
   const [friend, setFriend] = useState<Round | null>(challenge.current);
   // The rules the level in play was built with, for a challenge made from it.
-  const roundRules = useRef<Rules>({ perks: { ...NO_PERKS }, tries: 0 });
+  const roundRules = useRef<Rules>({
+    perks: { ...NO_PERKS },
+    tries: 0,
+    packs: true,
+  });
   // The finished level's points, and the round to challenge a friend with.
   const [score, setScore] = useState<Points | null>(null);
   const [played, setPlayed] = useState<Round | null>(null);
@@ -307,7 +318,7 @@ export function CrowdGame() {
         ? triesRef.current.n
         : 0;
     const own = c ? c.rules.perks : perksRef.current;
-    roundRules.current = { perks: { ...own }, tries };
+    roundRules.current = { perks: { ...own }, tries, packs: true };
     const w = newLevel(lv, own, tries);
     applyPerks(w, own);
     return { w, tries };
@@ -1123,6 +1134,7 @@ export function CrowdGame() {
               </span>
             )}
             {!(capped && user) &&
+              !(friend && scoreOnly(level)) &&
               (picked > 0 || phase === "run" || phase === "boss") && (
                 <span
                   ref={walletRef}
