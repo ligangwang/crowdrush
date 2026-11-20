@@ -88,5 +88,9 @@
   "Can you beat my {0} points in Crowd Rush?": "我在人潮突击拿了 {0} 分，你能超过我吗？",
   "Challenge a friend": "挑战好友",
   "Link copied. Send it to a friend!": "链接已复制，发给朋友吧！",
-  "Challenge link": "挑战链接"
+  "Challenge link": "挑战链接",
+  "Your score to beat: {0} points": "你要超越的成绩：{0} 分",
+  "You play with the upgrades you had then.": "你用当时的升级来玩。",
+  "You beat your own {0}!": "你超过了自己的 {0} 分！",
+  "Your score to beat: {0}. {1} more to beat it.": "你要超越的成绩：{0} 分，再多 {1} 分就能超过。"
 }

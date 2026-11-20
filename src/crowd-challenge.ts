@@ -18,8 +18,17 @@ export const MAX_TRIES = 5;
 /** The highest level a challenge can name. */
 export const MAX_LEVEL = 9999;
 
-/** A level, the points to beat on it, and the rules it was played with. */
-export type Round = { level: number; score: number; rules: Rules };
+/**
+ * A level, the points to beat on it, and the rules it was played with.
+ * `mine` marks the player's own challenge, opened by them: their own score
+ * to beat.
+ */
+export type Round = {
+  level: number;
+  score: number;
+  rules: Rules;
+  mine?: boolean;
+};
 
 /** Rules as dingn keeps them: "s", "p" and "r" tiers, then the tries, e.g. "s3p2r1.t0". */
 export const writeRules = (r: Rules) =>
@@ -46,7 +55,7 @@ export function readChallenge(c: Challenge | null | undefined): Round | null {
   const level = Number(c.seed);
   const rules = readRules(c.rules);
   if (level < 1 || level > MAX_LEVEL || !rules) return null;
-  return { level, score: c.score, rules };
+  return { level, score: c.score, rules, ...(c.mine ? { mine: true } : {}) };
 }
 
 /** The challenge for a level just played, to make a link with. */

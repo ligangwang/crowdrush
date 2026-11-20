@@ -36,6 +36,11 @@ test("a challenge made from a level reads back as that level", () => {
     rules: "s3p2r10.t1",
   });
   assert.deepEqual(readChallenge(challengeFor(round)), round);
+  // The player's own challenge, opened by them, says so.
+  assert.equal(
+    readChallenge({ ...challengeFor(round), mine: true })?.mine,
+    true,
+  );
 });
 
 test("other games' challenges and malformed ones are ignored", () => {

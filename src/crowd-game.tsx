@@ -1267,12 +1267,20 @@ export function CrowdGame() {
           <div className="crowd-overlay crowd-challenge">
             <p className="eyebrow">{t(`Level ${level}`)}</p>
             <h2>
-              {t(
-                `A friend scored ${friend.score.toLocaleString("en-US")} points. Can you beat it?`,
-              )}
+              {friend.mine
+                ? t(
+                    `Your score to beat: ${friend.score.toLocaleString("en-US")} points`,
+                  )
+                : t(
+                    `A friend scored ${friend.score.toLocaleString("en-US")} points. Can you beat it?`,
+                  )}
             </h2>
             <p>
-              {t("You play with your friend's upgrades, so it's a fair match.")}
+              {friend.mine
+                ? t("You play with the upgrades you had then.")
+                : t(
+                    "You play with your friend's upgrades, so it's a fair match.",
+                  )}
             </p>
             {scoreOnly(level) && (
               <p className="crowd-retry-ease">
@@ -1664,10 +1672,16 @@ function Score({
           className={`crowd-rival${score.total > friend.score ? " beaten" : ""}`}
         >
           {score.total > friend.score
-            ? t(`You beat your friend's ${n(friend.score)}!`)
-            : t(
-                `Your friend scored ${n(friend.score)}. ${n(friend.score - score.total + 1)} more to beat it.`,
-              )}
+            ? friend.mine
+              ? t(`You beat your own ${n(friend.score)}!`)
+              : t(`You beat your friend's ${n(friend.score)}!`)
+            : friend.mine
+              ? t(
+                  `Your score to beat: ${n(friend.score)}. ${n(friend.score - score.total + 1)} more to beat it.`,
+                )
+              : t(
+                  `Your friend scored ${n(friend.score)}. ${n(friend.score - score.total + 1)} more to beat it.`,
+                )}
         </p>
       )}
     </div>

@@ -602,3 +602,37 @@ test("the version shows small in a corner", async () => {
   const { version } = await import("../game.json");
   expect(screen.getByText(`v${version}`).className).toBe("crowd-version");
 });
+
+test("the player's own challenge is their score to beat", async () => {
+  fakeSdk(true);
+  sdk.challenge = {
+    mode: "level",
+    seed: "2",
+    score: 900,
+    unit: "points",
+    rules: "s0p0r0.t0",
+    mine: true,
+  };
+  await play({ level: "3", best: "2" });
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "Your score to beat: 900 points" },
+      { timeout: 5000 },
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByText("You play with the upgrades you had then."),
+  ).toBeTruthy();
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "Start" })),
+  );
+  mocks.fall = true;
+  expect(
+    await screen.findByText(
+      /^Your score to beat: 900\. [\d,]+ more to beat it\.$/,
+      {},
+      { timeout: 3000 },
+    ),
+  ).toBeTruthy();
+});
