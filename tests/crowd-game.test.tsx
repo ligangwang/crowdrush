@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   /** Set to make the squad fall on the next game step. */
   fall: false,
   scene: null as { translate: (text: string) => string } | null,
+  /** How many times the scene repainted its words. */
+  relabels: 0,
   /** Holds the scene's downloads until a test lets them finish. */
   hold: null as null | {
     started?: boolean;
@@ -48,7 +50,9 @@ vi.mock("../src/crowd-scene", () => ({
     }
     resize() {}
     load() {}
-    relabel() {}
+    relabel() {
+      mocks.relabels++;
+    }
     loadModels = () => Promise.resolve();
     preload = (progress: (share: number) => void) => {
       if (!mocks.hold) {
@@ -71,6 +75,12 @@ vi.mock("../src/crowd-scene", () => ({
 /** A fake dingn website: device storage, account progress and calls made. */
 let stored: Map<string, string>;
 let sdk: DingnGame;
+/** The game's language listeners, so a test can switch language mid-game. */
+let languageListeners: Set<(locale: Locale) => void>;
+function switchLanguage(locale: Locale) {
+  sdk.locale = locale;
+  for (const fn of languageListeners) fn(locale);
+}
 const calls = {
   load: vi.fn<() => Promise<unknown>>(),
   save: vi.fn<(data: unknown) => Promise<void>>(),
@@ -83,6 +93,7 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
   calls.save.mockReset().mockResolvedValue(undefined);
   calls.signIn.mockReset();
   calls.navigate.mockReset();
+  languageListeners = new Set();
   sdk = {
     gameId: "crowd",
     version: "1.0.0",
@@ -93,6 +104,10 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
     challengeLink: async () => "",
     roundEnded: () => {},
     onPlayer: () => () => {},
+    onLanguage: (fn) => {
+      languageListeners.add(fn);
+      return () => languageListeners.delete(fn);
+    },
     storage: {
       get: async (key) => stored.get(key) ?? null,
       set: async (key, value) => void stored.set(key, String(value)),
@@ -402,6 +417,74 @@ test("the sign-in prompt is translated into Simplified Chinese", async () => {
   ).toBeTruthy();
   expect(screen.getByRole("button", { name: "登录继续玩" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "重玩第 5 关" })).toBeTruthy();
+});
+
+test("switching language mid-level re-renders in it and keeps the run going", async () => {
+  fakeSdk(true);
+  mocks.scene = null;
+  const view = await play({ level: "3" });
+  const start = await screen.findByRole(
+    "button",
+    { name: "Start" },
+    { timeout: 5000 },
+  );
+  await act(async () => fireEvent.click(start));
+  const w = (
+    window as unknown as {
+      __crowd: { current: { z: number; level: number } };
+    }
+  ).__crowd.current;
+  fireEvent.click(await screen.findByRole("button", { name: "Pause" }));
+  const z = w.z;
+  const relabels = mocks.relabels;
+  expect(languageListeners.size).toBe(1);
+  await act(async () => switchLanguage("es"));
+  // the same paused run, now in Spanish
+  expect(screen.getByRole("dialog", { name: "En pausa" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Continuar" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Reiniciar nivel" })).toBeTruthy();
+  expect(screen.getAllByText("Nivel 3").length).toBeGreaterThan(0);
+  expect((window as unknown as Crowd).__crowd.current).toBe(w);
+  expect(w.level).toBe(3);
+  expect(w.z).toBe(z);
+  // the words painted on the 3D crates repaint in Spanish
+  expect(mocks.relabels).toBeGreaterThan(relabels);
+  expect(mocks.scene!.translate("POWER")).toBe("PODER");
+  expect(mocks.scene!.translate("RATE+")).toBe("CADENCIA+");
+  // and on to Korean, still the same run
+  await act(async () => switchLanguage("ko"));
+  expect(screen.getByRole("dialog", { name: "일시정지됨" })).toBeTruthy();
+  expect(mocks.scene!.translate("POWER")).toBe("공격력");
+  fireEvent.click(screen.getByRole("button", { name: "계속하기" }));
+  await waitFor(() => expect(w.z).toBeGreaterThan(z));
+  // stops listening once the game is gone
+  view.unmount();
+  expect(languageListeners.size).toBe(0);
+});
+
+test("every language dingn gives the game shows its own words", async () => {
+  const start: Record<string, string> = {
+    es: "Empezar",
+    "pt-BR": "Começar",
+    id: "Mulai",
+    ja: "スタート",
+    ko: "시작",
+  };
+  for (const [locale, word] of Object.entries(start)) {
+    fakeSdk(false, locale);
+    await play();
+    expect(
+      await screen.findByRole("button", { name: word }, { timeout: 5000 }),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Crowd Rush" })).toBeTruthy();
+    cleanup();
+  }
+  // a language the game has no pack for gets English, not Chinese
+  fakeSdk(false, "fr");
+  await play();
+  expect(
+    await screen.findByRole("button", { name: "Start" }, { timeout: 5000 }),
+  ).toBeTruthy();
 });
 
 test("the pause menu holds the run and restarts the level as an easier try", async () => {

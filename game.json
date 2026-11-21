@@ -1,14 +1,25 @@
 {
   "id": "crowdrush",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "title": {
     "en": "Crowd Rush",
-    "zh": "人潮突击"
+    "zh": "人潮突击",
+    "es": "Crowd Rush",
+    "pt-BR": "Crowd Rush",
+    "id": "Crowd Rush",
+    "ja": "Crowd Rush",
+    "ko": "Crowd Rush"
   },
   "description": {
     "en": "A 3D crowd runner: grow your squad through number gates, blast crates and monsters, and take down the boss at the end of every level.",
-    "zh": "3D 人潮跑酷：穿过数字门壮大队伍，击碎箱子和怪物，在每关结尾打败首领。"
+    "zh": "3D 人潮跑酷：穿过数字门壮大队伍，击碎箱子和怪物，在每关结尾打败首领。",
+    "es": "Un corredor de multitudes en 3D: haz crecer tu escuadrón cruzando puertas de números, revienta cajas y monstruos, y derrota al jefe al final de cada nivel.",
+    "pt-BR": "Um jogo de corrida com multidão em 3D: aumente seu esquadrão passando por portões de números, destrua caixas e monstros e derrote o chefão no fim de cada fase.",
+    "id": "Game lari kerumunan 3D: perbesar pasukanmu lewat gerbang angka, hancurkan peti dan monster, lalu kalahkan bos di akhir setiap level.",
+    "ja": "3Dの群衆ランゲーム：数字のゲートをくぐって部隊を増やし、木箱やモンスターを撃ち破って、各レベルの最後でボスを倒そう。",
+    "ko": "3D 군중 러너 게임: 숫자 게이트를 지나 부대를 키우고, 상자와 몬스터를 부수고, 레벨마다 마지막에 나오는 보스를 쓰러뜨려요."
   },
+  "languages": ["en", "zh-CN", "es", "pt-BR", "id", "ja", "ko"],
   "entry": "index.html",
   "cover": "cover.jpg",
   "badges": [
