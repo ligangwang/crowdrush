@@ -291,7 +291,7 @@ export function CrowdGame() {
         balance: result.balance,
       });
     else if (result.status === "failed")
-      setShopNote(tRef.current("The upgrade shop is unavailable right now."));
+      setShopNote("The upgrade shop is unavailable right now.");
   }
   // A friend's challenge plays without an account, for the points.
   const locked = needsSignIn(level, !!user) && !friend;
@@ -793,8 +793,10 @@ export function CrowdGame() {
         break;
       case "upgrade": {
         const power = e.kind === "power";
+        // the game loop keeps its first closure, so read the current language
+        const tr = tRef.current;
         float(
-          power ? t(`Damage ×${e.level}`) : t("Faster fire"),
+          power ? tr(`Damage ×${e.level}`) : tr("Faster fire"),
           e.x,
           e.z,
           2,
@@ -1488,7 +1490,7 @@ export function CrowdGame() {
                     </button>
                   </div>
                 )}
-                {shopNote && <p className="crowd-shop-note">{shopNote}</p>}
+                {shopNote && <p className="crowd-shop-note">{t(shopNote)}</p>}
               </div>
             </div>
           )}

@@ -13,6 +13,11 @@ Notes for AI coding agents working on Crowd Rush.
   already has.
 - Save with `sdk.storage` / `sdk.progress`, never `localStorage` or cookies,
   which the sandbox blocks. Keep every URL relative (`base: "./"`).
-- UI strings go through `t()` with translations in `src/zh-CN.json`.
+- UI strings go through `t()`. English is the source text; every other
+  language in game.json's `languages` has a pack in `src/locales/<lang>.json`
+  mapping the English text to its translation (`{0}` patterns allowed). Add a
+  new string to every pack (a test checks they all have the same keys and
+  placeholders). The player can switch language mid-game (`sdk.onLanguage`),
+  so read text through `t()` at render time, not once into state.
 - The 3D models are Polyfork CC BY 4.0: list any new model in
   `public/models/CREDITS.md`.

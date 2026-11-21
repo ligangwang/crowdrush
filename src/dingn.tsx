@@ -22,8 +22,18 @@ export function DingnProvider({
   // Re-render when the player signs in or out.
   const [player, setPlayer] = useState(sdk.player);
   useEffect(() => sdk.onPlayer(setPlayer), [sdk]);
+  // Re-render in the new language when the player switches it mid-game; the
+  // game keeps going. Older dingn builds don't have onLanguage.
+  const [locale, setLocale] = useState(sdk.locale);
+  useEffect(() => {
+    setLocale(sdk.locale);
+    return sdk.onLanguage?.((next) => {
+      document.documentElement.lang = next;
+      setLocale(next);
+    });
+  }, [sdk]);
   return (
-    <DingnContext.Provider value={{ ...sdk, player }}>
+    <DingnContext.Provider value={{ ...sdk, player, locale }}>
       {children}
     </DingnContext.Provider>
   );
