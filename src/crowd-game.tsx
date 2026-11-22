@@ -59,6 +59,7 @@ import {
 import {
   applyPerks,
   BOSS_FALL,
+  bossFor,
   BOSS_IMPACT,
   NO_PERKS,
   startCount,
@@ -1113,8 +1114,11 @@ export function CrowdGame() {
           <div className="crowd3d-progress">
             <div ref={progressRef} />
           </div>
-          <div className="crowd3d-boss" ref={bossBarRef} hidden>
-            <div ref={bossFillRef} />
+          <div className="crowd3d-bossbox" ref={bossBarRef} hidden>
+            <div className="crowd3d-bossname">{t(bossFor(level).name)}</div>
+            <div className="crowd3d-boss">
+              <div ref={bossFillRef} />
+            </div>
           </div>
         </div>
         <div className="crowd-hud">

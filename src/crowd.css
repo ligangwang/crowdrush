@@ -329,8 +329,18 @@
 .crowd3d-boss {
   height: 16px;
 }
-.crowd3d-boss[hidden] {
+.crowd3d-bossbox[hidden] {
   display: none;
+}
+.crowd3d-bossname {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px #000a;
+  margin-bottom: 3px;
 }
 .crowd3d-boss div {
   height: 100%;

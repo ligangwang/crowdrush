@@ -92,5 +92,9 @@
   "Your score to beat: {0} points": "Skor yang harus dikalahkan: {0} poin",
   "You play with the upgrades you had then.": "Kamu main dengan upgrade yang kamu punya saat itu.",
   "You beat your own {0}!": "Kamu mengalahkan skormu sendiri, {0}!",
-  "Your score to beat: {0}. {1} more to beat it.": "Skor yang harus dikalahkan: {0}. Kurang {1} lagi untuk mengalahkannya."
+  "Your score to beat: {0}. {1} more to beat it.": "Skor yang harus dikalahkan: {0}. Kurang {1} lagi untuk mengalahkannya.",
+  "T-Rex": "T-Rex",
+  "Horned Titan": "Titan Bertanduk",
+  "Orc Warlord": "Panglima Orc",
+  "Inferno Rex": "Rex Neraka"
 }

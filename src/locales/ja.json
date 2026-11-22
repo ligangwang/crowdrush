@@ -92,5 +92,9 @@
   "Your score to beat: {0} points": "目標スコア：{0}ポイント",
   "You play with the upgrades you had then.": "そのときのアップグレードで遊びます。",
   "You beat your own {0}!": "自分の{0}を超えました！",
-  "Your score to beat: {0}. {1} more to beat it.": "目標スコア：{0}。あと{1}で超えられます。"
+  "Your score to beat: {0}. {1} more to beat it.": "目標スコア：{0}。あと{1}で超えられます。",
+  "T-Rex": "ティラノサウルス",
+  "Horned Titan": "ツノの巨人",
+  "Orc Warlord": "オークの将軍",
+  "Inferno Rex": "インフェルノ・レックス"
 }

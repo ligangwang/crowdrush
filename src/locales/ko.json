@@ -92,5 +92,9 @@
   "Your score to beat: {0} points": "넘어야 할 점수: {0}점",
   "You play with the upgrades you had then.": "그때의 업그레이드로 플레이해요.",
   "You beat your own {0}!": "내 기록 {0}점을 넘었어요!",
-  "Your score to beat: {0}. {1} more to beat it.": "넘어야 할 점수: {0}점. {1}점만 더 따면 이겨요."
+  "Your score to beat: {0}. {1} more to beat it.": "넘어야 할 점수: {0}점. {1}점만 더 따면 이겨요.",
+  "T-Rex": "티라노사우루스",
+  "Horned Titan": "뿔 달린 거인",
+  "Orc Warlord": "오크 대장군",
+  "Inferno Rex": "인페르노 렉스"
 }

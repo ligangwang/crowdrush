@@ -81,7 +81,65 @@ export type Coin = {
   value: number;
   taken: boolean;
 };
+/**
+ * The bosses, one for every ten levels: levels 1 to 10 meet the first,
+ * 11 to 20 the second, and so on, starting over after the last. Each has
+ * its own look and a trait or two; the level sets how tough they all are.
+ * `hp`, `slam` and `summon` scale the level's boss health, time between
+ * slams and time between summons; `minions` adds to each summon; `walk` is
+ * how fast it closes in (m/s).
+ */
+export const BOSSES = [
+  // the classic: steady all round
+  {
+    kind: "rex",
+    name: "T-Rex",
+    hp: 1,
+    slam: 1,
+    summon: 1,
+    minions: 0,
+    walk: 1,
+  },
+  // a slow, heavy brawler that soaks up fire
+  {
+    kind: "titan",
+    name: "Horned Titan",
+    hp: 1.15,
+    slam: 1.2,
+    summon: 1,
+    minions: 0,
+    walk: 0.85,
+  },
+  // charges in fast, bringing a bigger horde less often
+  {
+    kind: "warlord",
+    name: "Orc Warlord",
+    hp: 0.9,
+    slam: 1,
+    summon: 1.25,
+    minions: 2,
+    walk: 1.4,
+  },
+  // a burning rex that stomps more often
+  {
+    kind: "inferno",
+    name: "Inferno Rex",
+    hp: 0.95,
+    slam: 0.85,
+    summon: 1,
+    minions: 0,
+    walk: 1,
+  },
+] as const;
+export type BossKind = (typeof BOSSES)[number]["kind"];
+/** Levels each boss holds the end of the road for. */
+export const BOSS_LEVELS = 10;
+/** The boss waiting at the end of level `lv`. */
+export const bossFor = (lv: number) =>
+  BOSSES[Math.floor((Math.max(1, lv) - 1) / BOSS_LEVELS) % BOSSES.length];
+
 export type Boss = {
+  kind: BossKind;
   z: number;
   hp: number;
   maxHp: number;
@@ -92,6 +150,8 @@ export type Boss = {
   summon: number;
   summonEvery: number;
   minions: number;
+  /** How fast it stomps toward the squad once the fight starts (m/s). */
+  walk: number;
 };
 export type Bullet = {
   x: number;
@@ -185,7 +245,7 @@ export const BOSS_STOP = 14;
 export const BOSS_IMPACT = 1.05;
 /** Seconds from the boss's last hit until the win screen shows. */
 export const BOSS_FALL = 2.2;
-/** How fast the boss stomps toward the squad once the fight starts (m/s). */
+/** How fast the first boss stomps toward the squad (m/s); see BOSSES. */
 export const BOSS_WALK = 1.0;
 /** How close the boss gets before it tramples the squad. */
 export const BOSS_REACH = 2.5;
@@ -696,8 +756,10 @@ export function newLevel(
   // seconds of full fire the boss soaks up, assuming every weapon crate;
   // from level 21 the boss grows tougher still, up to half again at 54
   const late = 1 + Math.min(0.5, 0.015 * Math.max(0, lv - 20));
+  const kind = bossFor(lv);
   const bossHp = Math.round(
-    squadDps(expected) *
+    kind.hp *
+      squadDps(expected) *
       gun ** 0.9 *
       (5 + 2 * Math.sqrt(hard)) *
       late *
@@ -718,14 +780,16 @@ export function newLevel(
     coins,
     picked: 0,
     boss: {
+      kind: kind.kind,
       z: length,
       hp: bossHp,
       maxHp: bossHp,
       slam: 2.2,
-      slamEvery: Math.max(0.7, 1.8 - hard * 0.05) / soften,
+      slamEvery: (kind.slam * Math.max(0.7, 1.8 - hard * 0.05)) / soften,
       summon: 1.2,
-      summonEvery: Math.max(1.2, 2.6 - hard * 0.06) / soften,
-      minions: Math.min(9, 2 + Math.floor(hard / 3)),
+      summonEvery: (kind.summon * Math.max(1.2, 2.6 - hard * 0.06)) / soften,
+      minions: Math.min(9, 2 + Math.floor(hard / 3)) + kind.minions,
+      walk: kind.walk * BOSS_WALK,
     },
     bullets: [],
     power: 1,
@@ -1107,7 +1171,7 @@ export function step(w: World, dt: number) {
 
   // the boss stomps toward the squad, slamming the ground as it comes
   if (w.phase === "boss") {
-    w.boss.z = Math.max(w.z + BOSS_REACH, w.boss.z - BOSS_WALK * dt);
+    w.boss.z = Math.max(w.z + BOSS_REACH, w.boss.z - w.boss.walk * dt);
     // once it is on top of the squad it tramples twice as often
     const trampling = w.boss.z <= w.z + BOSS_REACH + 0.01;
     w.boss.slam -= dt * (trampling ? 2 : 1);
