@@ -32,17 +32,20 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   MODEL_URLS,
+  PROP_URLS,
   WEAPONS,
   bake,
   bakeHeld,
   loadModel,
   propGeometry,
+  propModel,
   recolor,
   runPose,
   standPose,
   stompPose,
   type Baked,
   type Pose,
+  type Props,
 } from "./crowd-models";
 import {
   HAZE,
@@ -999,10 +1002,20 @@ class BlockView {
     rewardTex?: THREE.Texture,
     /** Word painted on a weapon crate, already in the player's language. */
     private title = "",
+    props: Props = {},
   ) {
     const up = block.upgrade;
     const crate = block.reward > 0 || !!up;
     const W = block.w * 2 * ROAD;
+    const real = up ? props.ammo : crate ? props.crate : props.barrier;
+    if (real) {
+      this.real = true;
+      this.mats = [];
+      this.tex = new THREE.CanvasTexture(this.canvas);
+      this.tex.colorSpace = THREE.SRGBColorSpace;
+      this.buildReal(real, W, !!up, crate, rewardTex);
+      return;
+    }
     const H = crate ? 1.3 : 1.7;
     const D = crate ? 1.3 : 0.8;
     this.canvas.width = 256;
@@ -1078,6 +1091,106 @@ class BlockView {
     this.group.position.set(block.x * ROAD, 0, -block.z);
     this.paint();
   }
+  /** True once it's drawn with a photographed model, not a box. */
+  private real = false;
+
+  /**
+   * The photographed roadblock, sized to the block's width: a striped
+   * concrete barrier for a wall, two military crates stacked for a reward
+   * crate, a big ammo box for a weapon crate. The hits left show on a plate
+   * in front, as on the boxes.
+   */
+  private buildReal(
+    model: THREE.Object3D,
+    W: number,
+    weapon: boolean,
+    crate: boolean,
+    rewardTex?: THREE.Texture,
+  ) {
+    const size = new THREE.Box3()
+      .setFromObject(model)
+      .getSize(new THREE.Vector3());
+    let H: number;
+    let D: number;
+    if (weapon) {
+      // the ammo box's long side faces the squad
+      const s = (W * 1.05) / size.z;
+      const box = model.clone();
+      box.scale.setScalar(s);
+      box.rotation.y = Math.PI / 2;
+      this.group.add(box);
+      H = size.y * s;
+      D = size.x * s;
+    } else if (crate) {
+      // two crates stacked, the top one slightly askew
+      const s = W / size.x;
+      const h = size.y * s;
+      for (const [y, yaw, dx] of [
+        [0, 0, 0],
+        [h, 0.09, W * 0.03],
+      ]) {
+        const c = model.clone();
+        c.scale.setScalar(s);
+        c.position.set(dx, y, 0);
+        c.rotation.y = yaw;
+        this.group.add(c);
+      }
+      H = h * 2;
+      D = size.z * s;
+    } else {
+      // a concrete barrier, a little taller than life so it reads as a wall
+      const s = W / size.x;
+      const wall = model.clone();
+      wall.scale.set(s, s * 1.35, s);
+      this.group.add(wall);
+      H = size.y * s * 1.35;
+      D = size.z * s;
+    }
+    // the plate with the hits left, just in front of the face
+    const PW = Math.min(W * 0.62, 1.1);
+    const PH = weapon ? PW * 0.62 : PW * 0.48;
+    this.canvas.width = 256;
+    this.canvas.height = Math.round((256 * PH) / PW);
+    const front = new THREE.MeshBasicMaterial({
+      map: this.tex,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+    });
+    this.mats.push(front);
+    const plateGeo = new THREE.PlaneGeometry(PW, PH);
+    this.geos.push(plateGeo);
+    const plate = new THREE.Mesh(plateGeo, front);
+    plate.position.set(0, Math.min(H * 0.55, H - PH / 2 - 0.05), D / 2 + 0.06);
+    this.group.add(plate);
+    if (weapon && this.block.upgrade) {
+      // a glowing ring marks a weapon crate from far away
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(W * 0.62, 0.06, 6, 24),
+        new THREE.MeshBasicMaterial({
+          color: UPGRADE_COLORS[this.block.upgrade][1],
+        }),
+      );
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.06;
+      this.geos.push(ring.geometry);
+      this.mats.push(ring.material);
+      this.group.add(ring);
+    }
+    if (crate && rewardTex) {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: rewardTex, depthWrite: false }),
+      );
+      sprite.scale.set(1.3, 0.65, 1);
+      sprite.position.y = H + 0.55;
+      this.group.add(sprite);
+      this.mats.push(sprite.material);
+      this.sprite = sprite;
+    }
+    this.group.position.set(this.block.x * ROAD, 0, -this.block.z);
+    this.paint();
+  }
   paint() {
     const b = this.block;
     if (b.hp === this.hp) return;
@@ -1087,7 +1200,27 @@ class BlockView {
     const { width: w, height: h } = this.canvas;
     const crate = b.reward > 0;
     ctx.clearRect(0, 0, w, h);
-    if (b.upgrade) {
+    if (this.real) {
+      // a dark stencilled plate on the photographed model
+      ctx.fillStyle = "rgba(14, 16, 20, 0.72)";
+      ctx.beginPath();
+      ctx.roundRect(4, 4, w - 8, h - 8, 18);
+      ctx.fill();
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = b.upgrade
+        ? b.upgrade === "power"
+          ? "#ffb08a"
+          : "#9fe8ff"
+        : "rgba(255, 255, 255, 0.55)";
+      ctx.stroke();
+      if (b.upgrade) {
+        ctx.fillStyle = b.upgrade === "power" ? "#ffd34a" : "#d8f6ff";
+        ctx.font = `900 ${Math.round(h * 0.24)}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(this.title, w / 2, h * 0.1, w - 28);
+      }
+    } else if (b.upgrade) {
       const power = b.upgrade === "power";
       // a dark painted frame and a stencilled word
       ctx.strokeStyle = power ? "#5c120e" : "#0a3c5a";
@@ -1122,12 +1255,14 @@ class BlockView {
         ctx.fill();
       }
     }
-    ctx.font = `900 ${Math.round(Math.min(h * 0.5, 96))}px system-ui, sans-serif`;
+    ctx.font = `900 ${Math.round(
+      this.real ? h * (b.upgrade ? 0.5 : 0.72) : Math.min(h * 0.5, 96),
+    )}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.lineWidth = 10;
     ctx.strokeStyle = "#000000aa";
-    const ty = b.upgrade ? h * 0.62 : h / 2 + 4;
+    const ty = b.upgrade ? h * 0.64 : h / 2 + 4;
     ctx.strokeText(String(b.hp), w / 2, ty);
     ctx.fillStyle = "#fff";
     ctx.fillText(String(b.hp), w / 2, ty);
@@ -1498,8 +1633,22 @@ export class CrowdScene {
       loadModel(url, (k) => progress?.(url, k)).finally(() =>
         progress?.(url, 1),
       );
-    // the guns download alongside the characters
+    // the guns and roadblocks download alongside the characters; a missing
+    // roadblock keeps its plain stand-in box
     const guns = Promise.allSettled(WEAPONS.map((wp) => get(wp.url)));
+    const props = Promise.allSettled([
+      get(PROP_URLS.barrier),
+      get(PROP_URLS.crate),
+      get(PROP_URLS.ammo),
+    ]).then(([barrier, crate, ammo]) => {
+      if (barrier.status === "fulfilled")
+        this.props.barrier = propModel(barrier.value);
+      // the scan has a closed crate (parts ending "_a") and an open one
+      if (crate.status === "fulfilled")
+        this.props.crate = propModel(crate.value, (n) => n.endsWith("_a"));
+      if (ammo.status === "fulfilled") this.props.ammo = propModel(ammo.value);
+      if (!this.disposed) this.rebuildBlocks();
+    });
     const [runner, brute, boss] = await Promise.all([
       get(MODEL_URLS.runner),
       get(MODEL_URLS.brute),
@@ -1583,9 +1732,12 @@ export class CrowdScene {
       ),
     );
     this.boss.useModel(boss, 6);
+    await props;
     this.modelsReady = true;
   }
   modelsReady = false;
+  /** The photographed roadblocks, once loaded. */
+  private props: Props = {};
 
   /**
    * Downloads everything a level shows: the sky, every photograph and the
@@ -1600,6 +1752,7 @@ export class CrowdScene {
       MODEL_URLS.brute,
       MODEL_URLS.boss,
       ...WEAPONS.map((wp) => wp.url),
+      ...Object.values(PROP_URLS),
     ];
     const shares = new Map(urls.map((u) => [u, 0]));
     let files = 0;
@@ -1896,18 +2049,37 @@ export class CrowdScene {
         const g = new GateView(th, this.gateFrame);
         this.gates.push(g);
         this.level.add(g.group);
-      } else if (th.kind === "block") {
-        const words = th.upgrade && this.upgradeWords(th.upgrade);
-        const tex = words
-          ? words.tex
-          : th.reward
-            ? labelTexture(`+${th.reward}`, "#fff36a")
-            : undefined;
-        const b = new BlockView(th, tex, words ? words.title : "");
-        this.blocks.set(th.id, b);
-        this.level.add(b.group);
       }
     }
+    this.world = w;
+    this.addBlocks(w);
+  }
+  private world?: World;
+
+  /** Crates and walls, as the photographed models once they're loaded. */
+  private addBlocks(w: World) {
+    for (const th of w.things) {
+      if (th.kind !== "block") continue;
+      const words = th.upgrade && this.upgradeWords(th.upgrade);
+      const tex = words
+        ? words.tex
+        : th.reward
+          ? labelTexture(`+${th.reward}`, "#fff36a")
+          : undefined;
+      const b = new BlockView(th, tex, words ? words.title : "", this.props);
+      this.blocks.set(th.id, b);
+      this.level.add(b.group);
+    }
+  }
+  /** Swaps the level's stand-in boxes for the models that just arrived. */
+  private rebuildBlocks() {
+    if (!this.world) return;
+    for (const b of this.blocks.values()) {
+      b.group.removeFromParent();
+      b.dispose();
+    }
+    this.blocks.clear();
+    this.addBlocks(this.world);
   }
 
   /** The translated words for a weapon crate: on the box and above it. */
