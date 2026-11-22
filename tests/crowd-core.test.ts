@@ -41,6 +41,9 @@ import {
   points,
   SPEED_POINTS,
   BOSS_POINTS,
+  BOSS_WALK,
+  BOSSES,
+  bossFor,
 } from "../src/crowd-core";
 
 /** A simple player: take the better gate, dodge walls, shoot what it can break. */
@@ -149,7 +152,8 @@ test("without upgrades the first levels are fine, but later ones are hard", () =
 
 test("levels 1 to 10 are eased in, and the easing is gone from level 11", () => {
   // the boss's summon interval before easing (hard = level + 3)
-  const unsoftened = (lv: number) => Math.max(1.2, 2.6 - (lv + 3) * 0.06);
+  const unsoftened = (lv: number) =>
+    bossFor(lv).summon * Math.max(1.2, 2.6 - (lv + 3) * 0.06);
   let last = Infinity;
   for (let lv = 1; lv <= 12; lv++) {
     const ratio = newLevel(lv).boss.summonEvery / unsoftened(lv);
@@ -688,4 +692,22 @@ test("a slow boss kill earns no speed points", () => {
   const w = play(10, autopilot, { power: k, rate: k, squad: k });
   w.bossAt = w.time - 25;
   assert.equal(points(w).speed, 0);
+});
+
+test("the boss changes every 10 levels, starting over after the last", () => {
+  assert.equal(newLevel(1).boss.kind, "rex");
+  assert.equal(newLevel(10).boss.kind, "rex");
+  assert.equal(newLevel(11).boss.kind, "titan");
+  assert.equal(newLevel(20).boss.kind, "titan");
+  assert.equal(newLevel(21).boss.kind, "warlord");
+  assert.equal(newLevel(31).boss.kind, "inferno");
+  assert.equal(newLevel(41).boss.kind, BOSSES[0].kind);
+  assert.equal(bossFor(10 * BOSSES.length + 1), BOSSES[0]);
+  // every boss is a different one
+  assert.equal(new Set(BOSSES.map((b) => b.kind)).size, BOSSES.length);
+  assert.equal(new Set(BOSSES.map((b) => b.name)).size, BOSSES.length);
+  // each boss's traits show up in its fight
+  const warlord = newLevel(21).boss;
+  assert.equal(warlord.walk, BOSS_WALK * bossFor(21).walk);
+  assert.ok(warlord.minions > newLevel(20).boss.minions);
 });

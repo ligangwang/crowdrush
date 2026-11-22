@@ -15,7 +15,9 @@ Changes: the files were quantized with `gltf-transform quantize` to make them
 smaller, and the T-Rex's animation keyframes were resampled
 (`gltf-transform resample`). At runtime the game recolours the rifleman's jacket and helmet per
 team, poses the rifleman and orc with its own run and walk cycles, and scales
-all three models. The T-Rex opens its jaw as it lunges. The three weapons (in `weapons/`) are
+all three models. The T-Rex opens its jaw as it lunges. The bosses change every ten levels:
+the T-Rex, a code-built titan, the orc scaled up as a warlord, and the T-Rex
+repainted in charred red and lava orange. The three weapons (in `weapons/`) are
 placed in the rifleman's hand in place of his rifle, one per damage level.
 
 Polyfork does not endorse this game.

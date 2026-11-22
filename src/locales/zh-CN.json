@@ -92,5 +92,9 @@
   "Your score to beat: {0} points": "你要超越的成绩：{0} 分",
   "You play with the upgrades you had then.": "你用当时的升级来玩。",
   "You beat your own {0}!": "你超过了自己的 {0} 分！",
-  "Your score to beat: {0}. {1} more to beat it.": "你要超越的成绩：{0} 分，再多 {1} 分就能超过。"
+  "Your score to beat: {0}. {1} more to beat it.": "你要超越的成绩：{0} 分，再多 {1} 分就能超过。",
+  "T-Rex": "霸王龙",
+  "Horned Titan": "巨角泰坦",
+  "Orc Warlord": "兽人督军",
+  "Inferno Rex": "炼狱暴龙"
 }

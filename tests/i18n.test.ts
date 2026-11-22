@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
+import { BOSSES } from "../src/crowd-core";
 import { packs, translate } from "../src/i18n";
 
 const game = JSON.parse(readFileSync("game.json", "utf8")) as {
@@ -104,4 +105,9 @@ test("English, unknown languages and missing text stay English, never Chinese", 
       if (lang !== "ja") assert.ok(!hasHan(text), `${lang}: ${key}`);
     }
   }
+});
+
+test("every boss name is translated", () => {
+  for (const [lang, pack] of Object.entries(packs))
+    for (const b of BOSSES) assert.ok(pack[b.name], `${lang}: ${b.name}`);
 });

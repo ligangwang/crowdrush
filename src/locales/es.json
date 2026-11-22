@@ -92,5 +92,9 @@
   "Your score to beat: {0} points": "Tu marca a superar: {0} puntos",
   "You play with the upgrades you had then.": "Juegas con las mejoras que tenías entonces.",
   "You beat your own {0}!": "¡Superaste tus propios {0}!",
-  "Your score to beat: {0}. {1} more to beat it.": "Tu marca a superar: {0}. Te faltan {1} para superarla."
+  "Your score to beat: {0}. {1} more to beat it.": "Tu marca a superar: {0}. Te faltan {1} para superarla.",
+  "T-Rex": "T-Rex",
+  "Horned Titan": "Titán Cornudo",
+  "Orc Warlord": "Señor de la Guerra Orco",
+  "Inferno Rex": "Rex Infernal"
 }

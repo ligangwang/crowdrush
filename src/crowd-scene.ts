@@ -26,9 +26,11 @@ import {
   type Gate,
   type Monster,
   type Upgrade,
+  type BossKind,
   type World,
 } from "./crowd-core";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   MODEL_URLS,
@@ -44,6 +46,7 @@ import {
   standPose,
   stompPose,
   type Baked,
+  type Bones,
   type Pose,
   type Props,
 } from "./crowd-models";
@@ -642,7 +645,197 @@ export function bossFallPose(t: number) {
   return pose;
 }
 
-/** The horned boss at the end of the road. */
+/**
+ * A boss drawn from a model: it loops Idle or Walk (Run as a fallback) and
+ * plays an attack clip, if it has one, on each ground slam; otherwise it
+ * lunges forward with its jaw open. A model with no clips (the orc) is
+ * posed by `pose` instead: `walk` is its stride phase, `lift` how far its
+ * arms are raised for a slam.
+ */
+class ModelBoss {
+  readonly root = new THREE.Group();
+  private mats: THREE.MeshStandardMaterial[] = [];
+  private mixer: THREE.AnimationMixer;
+  private idle?: THREE.AnimationAction;
+  private walk?: THREE.AnimationAction;
+  private attack?: THREE.AnimationAction;
+  private looping?: THREE.AnimationAction;
+  private jaw?: THREE.Object3D;
+  private bones: Bones = {};
+  private rest: { bone: THREE.Bone; p: THREE.Vector3; q: THREE.Quaternion }[] =
+    [];
+  private stride = 0;
+  constructor(
+    gltf: GLTF,
+    height: number,
+    private look: {
+      /** Rewrites the model's vertex colours. */
+      paint?: (geo: THREE.BufferGeometry) => void;
+      /** A glow that pulses with the clock, on top of the hit flash. */
+      glow?: THREE.ColorRepresentation;
+      /** How brightly it flashes when hit (1: the T-Rex's flash). */
+      flash?: number;
+      pose?: (b: Bones, walk: number, lift: number) => void;
+    } = {},
+  ) {
+    const model = cloneSkinned(gltf.scene);
+    const box = new THREE.Box3().setFromObject(model);
+    model.scale.setScalar(height / Math.max(0.1, box.max.y - box.min.y));
+    model.traverse((o) => {
+      if ((o as THREE.Bone).isBone) this.bones[o.name] = o as THREE.Bone;
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      mesh.frustumCulled = false;
+      if (look.paint) {
+        mesh.geometry = mesh.geometry.clone();
+        look.paint(mesh.geometry);
+      }
+      const mat = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        flatShading: true,
+        roughness: 0.75,
+      });
+      mesh.material = mat;
+      this.mats.push(mat);
+    });
+    this.rest = Object.values(this.bones).map((bone) => ({
+      bone,
+      p: bone.position.clone(),
+      q: bone.quaternion.clone(),
+    }));
+    const mixer = new THREE.AnimationMixer(model);
+    this.mixer = mixer;
+    const action = (...names: string[]) => {
+      const c = gltf.animations.find((a) => names.includes(a.name));
+      return c ? mixer.clipAction(c) : undefined;
+    };
+    if (!look.pose) {
+      this.idle = action("Idle");
+      this.walk = action("Walk", "Run");
+      this.attack = action("FireBreath", "Attack", "Roar", "Bite");
+    }
+    if (this.attack) {
+      this.attack.setLoop(THREE.LoopOnce, 1);
+      mixer.addEventListener("finished", (e) => {
+        if (e.action === this.attack) this.attack?.fadeOut(0.25);
+      });
+    }
+    this.jaw = model.getObjectByName("Jaw");
+    this.loop(this.idle);
+    this.root.add(model);
+  }
+  private loop(next?: THREE.AnimationAction) {
+    if (!next || next === this.looping) return;
+    this.looping?.fadeOut(0.3);
+    next.reset().fadeIn(0.3).play();
+    this.looping = next;
+  }
+  update(
+    fx: SceneFx,
+    dead: number,
+    dt: number,
+    moving: boolean,
+    slammed: boolean,
+  ) {
+    this.loop(moving ? this.walk : this.idle);
+    if (slammed && this.attack) this.attack.reset().fadeIn(0.1).play();
+    // once beaten, its animation slows to a stagger, then freezes
+    const speed = dead < 0 ? 1 : dead < 0.6 ? 0.3 : 0;
+    this.mixer.update(dt * speed);
+    const glow = this.look.glow
+      ? _c
+          .set(this.look.glow)
+          .multiplyScalar(0.35 + 0.2 * Math.sin(fx.clock * 5))
+      : _c.setRGB(0, 0, 0);
+    const hit = fx.bossHit * (this.look.flash ?? 1);
+    for (const m of this.mats)
+      m.emissive.setRGB(
+        glow.r + hit * 0.35,
+        glow.g + hit * 0.1,
+        glow.b + hit * 0.05,
+      );
+    const lift = fx.slamAnim > 0.5 ? (1 - fx.slamAnim) * 2 : fx.slamAnim * 2;
+    if (this.look.pose) {
+      if (moving) this.stride += dt * 0.9 * speed;
+      for (const r of this.rest) {
+        r.bone.position.copy(r.p);
+        r.bone.quaternion.copy(r.q);
+      }
+      this.look.pose(this.bones, moving ? this.stride : 0, lift);
+    }
+    // without an attack clip or a pose of its own, each slam is a lunge
+    const lunge = this.attack || this.look.pose ? 0 : lift;
+    const fall = bossFallPose(dead);
+    if (this.jaw) this.jaw.rotation.x += lunge * 0.7 + fall.roar;
+    const model = this.root;
+    model.rotation.x = lunge * 0.25 + fall.rear;
+    model.position.z = lunge * 1.2;
+    model.position.x = fall.shake;
+    model.rotation.z = fall.tip;
+    model.position.y = -fall.sink;
+  }
+}
+
+/**
+ * Lava for the Inferno Rex: charred scales, darker where the model is
+ * shaded darker, with scattered patches glowing like cooling lava.
+ */
+export function infernoPaint(geo: THREE.BufferGeometry) {
+  const col = geo.getAttribute("color") as THREE.BufferAttribute | undefined;
+  const pos = geo.getAttribute("position");
+  const n = pos.count;
+  const lum = (i: number) =>
+    col ? col.getX(i) * 0.3 + col.getY(i) * 0.59 + col.getZ(i) * 0.11 : 0.5;
+  let avg = 0;
+  for (let i = 0; i < n; i++) avg += lum(i);
+  avg = Math.max(1e-4, avg / Math.max(1, n));
+  geo.computeBoundingBox();
+  const size = geo.boundingBox!.getSize(new THREE.Vector3());
+  const unit = Math.max(1e-4, size.x, size.y, size.z);
+  const char = new THREE.Color(0x24120e);
+  const ember = new THREE.Color(0x7a170a);
+  const hot = new THREE.Color(0xff7a1c);
+  const c = new THREE.Color();
+  const out = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const shade = Math.min(1, Math.max(0, (lum(i) / avg - 0.6) * 1.2));
+    c.copy(char).lerp(ember, shade);
+    // lava veins: bands across the body, broken up so they read as cracks
+    const x = pos.getX(i) / unit;
+    const y = pos.getY(i) / unit;
+    const z = pos.getZ(i) / unit;
+    const vein = Math.sin(z * 31 + Math.sin(x * 23) * 2 + y * 9);
+    if (vein > 0.55) c.lerp(hot, Math.min(1, (vein - 0.55) * 3));
+    out[i * 3] = c.r;
+    out[i * 3 + 1] = c.g;
+    out[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute("color", new THREE.BufferAttribute(out, 3));
+}
+
+/**
+ * The Orc Warlord: stomps in with the orc brute's stride, and for each slam
+ * heaves both fists overhead and hammers them down.
+ */
+export const warlordPose = (b: Bones, walk: number, lift: number) => {
+  stompPose(b, walk);
+  for (const [arm, side] of [
+    [b.LeftArm, -1],
+    [b.RightArm, 1],
+  ] as const) {
+    if (!arm) continue;
+    arm.rotation.x -= lift * 2.2;
+    arm.rotation.z += side * lift * -0.7;
+  }
+  if (b.Spine) b.Spine.rotation.x -= lift * 0.35;
+};
+
+/**
+ * The boss at the end of the road. Every BOSS_LEVELS levels a different one
+ * waits there (see BOSSES in crowd-core); until the models load, all of
+ * them are drawn as the code-built Horned Titan.
+ */
 class Boss {
   group = new THREE.Group();
   private arms: THREE.Group[] = [];
@@ -762,101 +955,42 @@ class Boss {
     this.group.add(g);
     scene.add(this.group);
   }
-  private model?: THREE.Object3D;
-  private modelMats: THREE.MeshStandardMaterial[] = [];
-  private mixer?: THREE.AnimationMixer;
-  private idle?: THREE.AnimationAction;
-  private walk?: THREE.AnimationAction;
-  private attack?: THREE.AnimationAction;
-  private looping?: THREE.AnimationAction;
+  private looks: Partial<Record<BossKind, ModelBoss>> = {};
+  private kind: BossKind = "rex";
+  private shown?: ModelBoss;
   private lastSlam = 0;
   private lastZ = 0;
   private moving = 0;
-  private jaw?: THREE.Object3D;
-  /**
-   * Swaps the code-built boss for an animated model. It loops Idle or Walk
-   * (Run as a fallback) and plays an attack clip, if it has one, on each
-   * ground slam; otherwise it lunges forward with its jaw open.
-   */
-  useModel(gltf: GLTF, height: number, yaw = 0) {
-    const model = gltf.scene;
-    const box = new THREE.Box3().setFromObject(model);
-    model.scale.setScalar(height / Math.max(0.1, box.max.y - box.min.y));
-    model.rotation.y = yaw;
-    model.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.frustumCulled = false;
-      const mat = new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        flatShading: true,
-        roughness: 0.75,
-      });
-      mesh.material = mat;
-      this.modelMats.push(mat);
-    });
-    const mixer = new THREE.AnimationMixer(model);
-    this.mixer = mixer;
-    const action = (...names: string[]) => {
-      const c = gltf.animations.find((a) => names.includes(a.name));
-      return c ? mixer.clipAction(c) : undefined;
-    };
-    this.idle = action("Idle");
-    this.walk = action("Walk", "Run");
-    this.attack = action("FireBreath", "Attack", "Roar", "Bite");
-    if (this.attack) {
-      this.attack.setLoop(THREE.LoopOnce, 1);
-      mixer.addEventListener("finished", (e) => {
-        if (e.action === this.attack) this.attack?.fadeOut(0.25);
-      });
-    }
-    this.jaw = model.getObjectByName("Jaw");
-    this.loop(this.idle);
-    this.body.visible = false;
-    this.model = model;
-    this.group.add(model);
+  /** Adds the model drawn for one kind of boss. */
+  useModel(kind: BossKind, look: ModelBoss) {
+    this.looks[kind]?.root.removeFromParent();
+    this.looks[kind] = look;
+    look.root.visible = false;
+    this.group.add(look.root);
+    this.show(this.kind);
   }
-  private loop(next?: THREE.AnimationAction) {
-    if (!next || next === this.looping) return;
-    this.looping?.fadeOut(0.3);
-    next.reset().fadeIn(0.3).play();
-    this.looping = next;
+  /** Shows the boss for this level. */
+  show(kind: BossKind) {
+    this.kind = kind;
+    this.shown = this.looks[kind];
+    for (const l of Object.values(this.looks))
+      if (l) l.root.visible = l === this.shown;
+    this.body.visible = !this.shown;
   }
   update(w: World, fx: SceneFx, dead: number, dt = 0) {
+    if (w.boss.kind !== this.kind) this.show(w.boss.kind);
     this.group.position.set(0, 0, -w.boss.z);
-    if (this.model) {
+    const fall = bossFallPose(dead);
+    this.group.visible = !fall.gone;
+    if (this.shown) {
       // walk while it closes in, idle otherwise
       const step = this.lastZ - w.boss.z;
       this.lastZ = w.boss.z;
       this.moving =
         step > 0.0001 && step < 1 ? 0.4 : Math.max(0, this.moving - dt);
-      this.loop(this.moving > 0 ? this.walk : this.idle);
-      if (fx.slamAnim > this.lastSlam + 0.5 && this.attack)
-        this.attack.reset().fadeIn(0.1).play();
+      const slammed = fx.slamAnim > this.lastSlam + 0.5;
       this.lastSlam = fx.slamAnim;
-      // once beaten, its animation slows to a stagger, then freezes
-      this.mixer?.update(dead < 0 ? dt : dead < 0.6 ? dt * 0.3 : 0);
-      for (const m of this.modelMats)
-        m.emissive.setRGB(
-          fx.bossHit * 0.35,
-          fx.bossHit * 0.1,
-          fx.bossHit * 0.05,
-        );
-      // without an attack clip, each slam is a lunge at the squad
-      const lunge = this.attack
-        ? 0
-        : fx.slamAnim > 0.5
-          ? (1 - fx.slamAnim) * 2
-          : fx.slamAnim * 2;
-      const fall = bossFallPose(dead);
-      if (this.jaw) this.jaw.rotation.x += lunge * 0.7 + fall.roar;
-      this.model.rotation.x = lunge * 0.25 + fall.rear;
-      this.model.position.z = lunge * 1.2;
-      this.model.position.x = fall.shake;
-      this.model.rotation.z = fall.tip;
-      this.model.position.y = -fall.sink;
-      this.group.visible = !fall.gone;
+      this.shown.update(fx, dead, dt, this.moving > 0, slammed);
       return;
     }
     const lift = fx.slamAnim > 0.5 ? (1 - fx.slamAnim) * 2 : fx.slamAnim * 2;
@@ -870,12 +1004,10 @@ class Boss {
       m.emissive.setRGB(fx.bossHit * 0.3, fx.bossHit * 0.12, fx.bossHit * 0.25);
     this.eyes.emissiveIntensity = 0.7 + 0.5 * Math.sin(fx.clock * 6);
     // after the last hit the boss staggers, topples and sinks away
-    const fall = bossFallPose(dead);
     this.body.position.x = fall.shake;
     this.body.rotation.x = fall.rear;
     this.body.rotation.z = fall.tip;
     this.body.position.y -= fall.sink;
-    this.group.visible = !fall.gone;
   }
 }
 
@@ -1731,7 +1863,19 @@ export class CrowdScene {
         2.3 / bruteFrames.height,
       ),
     );
-    this.boss.useModel(boss, 6);
+    this.boss.useModel("rex", new ModelBoss(boss, 6));
+    this.boss.useModel(
+      "inferno",
+      new ModelBoss(boss, 6.4, {
+        paint: infernoPaint,
+        glow: 0x5a1404,
+        flash: 0.3,
+      }),
+    );
+    this.boss.useModel(
+      "warlord",
+      new ModelBoss(brute, 5.6, { pose: warlordPose, glow: 0x3a0606 }),
+    );
     await props;
     this.modelsReady = true;
   }
