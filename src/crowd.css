@@ -190,6 +190,18 @@
   max-height: calc(100% - 24px);
   overflow-y: auto;
 }
+/* dingn's sign-in box lies along the bottom of the game (about 70px on
+   desktop, 145px on a phone): the result sits above it. */
+.crowd-overlay.signin-box {
+  top: calc((100% - 90px) / 2);
+  max-height: calc(100% - 90px - 24px);
+}
+@media (max-width: 640px) {
+  .crowd-overlay.signin-box {
+    top: calc((100% - 160px) / 2);
+    max-height: calc(100% - 160px - 24px);
+  }
+}
 .crowd-overlay h2 {
   font-size: 28px;
   margin: 6px 0 10px;

@@ -6,15 +6,20 @@ export declare const PROTOCOL: 1;
  * code it receives.
  */
 export type Locale =
-  | "en"
-  | "zh-CN"
-  | "es"
-  | "pt-BR"
-  | "id"
-  | "ja"
-  | "ko"
-  | (string & {});
-export type Player = { signedIn: boolean; name: string; avatar: string };
+  "en" | "zh-CN" | "es" | "pt-BR" | "id" | "ja" | "ko" | (string & {});
+export type Player = {
+  signedIn: boolean;
+  name: string;
+  avatar: string;
+  /**
+   * True for a test account that dingn's admins made for testing. A game may
+   * show test tools (skip a level, unlock everything) to it, and must not
+   * show them to anyone else. dingn already keeps test accounts off its
+   * leaderboard and statistics. Websites from before test accounts leave it
+   * out, so treat a missing value as false.
+   */
+  tester?: boolean;
+};
 export type Json =
   null | boolean | number | string | Json[] | { [key: string]: Json };
 export type BadgeTier = "bronze" | "silver" | "gold" | "diamond";
@@ -68,7 +73,7 @@ export type Earning = {
 export type ChallengeUnit =
   "points" | "digits" | "cards" | "levels" | "stars" | "words" | "coins";
 /**
- * A score for a friend to beat. `mode` (1-24 lowercase letters, digits or
+ * A score for anyone to beat. `mode` (1-24 lowercase letters, digits or
  * dashes) and `seed` (1-32 letters, digits or dashes, such as a day) tell the
  * game which round to replay, so the friend plays the same one.
  */
@@ -92,6 +97,35 @@ export type Challenge = {
    */
   mine?: boolean;
 };
+/** A level's open challenge and where a score would stand in it, from `dingn.challengeStanding`. */
+export type ChallengeStanding = {
+  /** The nickname of the player who owns the challenge. */
+  name: string;
+  /** Their score to beat. */
+  score: number;
+  /** True when the challenge is the signed-in player's own. */
+  mine: boolean;
+  /** The place the score would take (the player's best counts if it is higher), or null below the results dingn keeps. */
+  rank: number | null;
+  /** How many players there would be, this one included. */
+  players: number;
+};
+/** How a challenge round ended, from `dingn.challengeResult`. */
+export type ChallengeOutcome = {
+  /** True when the score is higher than the challenge's. */
+  beat: boolean;
+  /** False for a signed-out player, and in a test: nothing was posted. */
+  posted: boolean;
+  /** The player's best score under this challenge. */
+  best: number;
+  /** Its place among the results, or null below the ones dingn keeps. */
+  rank: number | null;
+  /** How many players have posted a result. */
+  players: number;
+  test?: boolean;
+};
+/** What signing in would bring the player, for `dingn.showSignIn`. */
+export type SignInReason = "score" | "rewards" | "progress";
 export type DingnGame = {
   gameId: string;
   version: string;
@@ -147,18 +181,63 @@ export type DingnGame = {
    */
   challenge: Challenge | null;
   /**
-   * A link to this game that opens `challenge` for whoever follows it, with a
-   * link preview that shows the score. Share it yourself (copy it, or
-   * navigator.share). Rejects with code "invalid" for a malformed challenge,
-   * and "unknown_method" on a dingn website from before challenge links.
+   * A link to this game that opens the challenge of `challenge`'s level for
+   * whoever follows it, with a link preview that shows the score. Share it
+   * yourself (copy it, or navigator.share). A level (the game's `mode` and
+   * `seed`, whatever its `rules`) has one challenge: the first signed-in player to challenge
+   * it owns it, and a player who challenges a level that already has one
+   * has their score posted under it instead, dingn tells them their place,
+   * and the link is that challenge's. With `mode` "level" and the level's
+   * number as `seed`, dingn names the level ("Level 28") where it shows the
+   * challenge. Rejects with code "invalid" for a malformed challenge, and
+   * "unknown_method" on a dingn website from before challenge links.
    */
   challengeLink(challenge: Challenge): Promise<string>;
+  /**
+   * Asks, without posting anything, whether `challenge`'s level already has
+   * an open challenge, and where this score would stand in it. Null when the
+   * level has none (and for a test account, whose challenges stay its own).
+   * Call it at the end of a round played outside a challenge: with none,
+   * offer "Challenge anyone"; with one, name its owner and the place and
+   * offer to join it. Either button then calls `challengeLink`, which posts
+   * the score. Only a signed-in player joins: a visitor gets the standing
+   * as what signing in would bring (offer `requestSignIn()`), since a
+   * visitor's `challengeLink` makes an unlisted challenge of their own.
+   * Rejects with "invalid" for a malformed challenge, and
+   * "unknown_method" on a dingn website from before this call.
+   */
+  challengeStanding(challenge: Challenge): Promise<ChallengeStanding | null>;
+  /**
+   * Call it when the player finishes the round of `dingn.challenge`, with
+   * their score. A challenge is open to anyone: dingn posts a signed-in
+   * player's result under it, where every result is ranked, and tells the
+   * player whether they won; a signed-out player is told too and invited to
+   * sign in. Each player keeps their best score. Rejects with code
+   * "no_challenge" when the page was not opened from a challenge, and
+   * "unknown_method" on a dingn website from before challenge results.
+   */
+  challengeResult(score: number): Promise<ChallengeOutcome>;
   /**
    * Tells dingn a round was played to the end (won or lost), for the
    * website's play statistics. Call it once per finished round.
    */
   roundEnded(): void;
+  /** Sends the player to sign in at once. They come back to the game. */
   requestSignIn(): void;
+  /**
+   * Shows dingn's sign-in box over the game: what signing in brings, a
+   * "Sign in free" button and a way to put it away. Draw no sign-in text,
+   * link or button of your own; decide only when the box shows, such as on
+   * the result of a round. `reasons` says what this player would gain:
+   * "score" (their score saved and ranked), "rewards" (coins and badges),
+   * "progress" (their progress saved). After `challengeResult` for a
+   * signed-out player, dingn adds that their score will be posted under the
+   * challenge. Nothing shows for a signed-in player, or on a dingn website
+   * from before this call.
+   */
+  showSignIn(reasons?: SignInReason[]): void;
+  /** Takes the sign-in box away, such as when the next round starts. */
+  hideSignIn(): void;
   /** Leaves the game for a dingn page, such as "/" for the game list. The website keeps the player's language. */
   navigate(path: string): void;
   ready(): void;
