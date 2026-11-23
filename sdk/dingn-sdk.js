@@ -8,11 +8,13 @@
 //   const dingn = await connect();
 //   dingn.locale;                         // the player's language, one your game.json lists ("en" if none fits)
 //   dingn.onLanguage((locale) => …);      // the player switched language
-//   dingn.player;                         // { signedIn, name, avatar }
+//   dingn.player;                         // { signedIn, name, avatar, tester }
 //   dingn.onPlayer((player) => …);        // sign-in or sign-out
 //   await dingn.storage.set("best", 12);  // this device only
 //   await dingn.progress.save({ level }); // follows a signed-in player
-//   dingn.requestSignIn();
+//   dingn.requestSignIn();                // straight to the sign-in page
+//   dingn.showSignIn(["score", "rewards"]); // dingn's sign-in box over the game; draw none of your own
+//   dingn.hideSignIn();                   // take it away (the next round started)
 //   await dingn.rewards.unlock("level-10"); // a badge from game.json, once
 //   await dingn.rewards.list();           // the game's badges, and which are earned
 //   await dingn.rewards.spend("power-1"); // buy an upgrade from game.json's shop
@@ -22,6 +24,8 @@
 //   dingn.ready();                        // hide the website's loading screen
 //   dingn.challenge;                      // the friend's challenge this page opened, or null
 //   await dingn.challengeLink({ mode: "daily", seed: "2026-11-16", score: 10, unit: "points" });
+//   await dingn.challengeStanding({ mode: "level", seed: "28", score: 10, unit: "points" }); // the level's open challenge and the place this score would take, or null
+//   if (dingn.challenge) await dingn.challengeResult(12); // posts the result under the challenge
 //   dingn.roundEnded();                   // a round was played to the end
 //
 // Opened on its own (not inside dingn), connect() still works in a local
@@ -134,9 +138,14 @@ function connectToHost(host, timeout) {
         earn: (coins) => request("rewards.earn", { coins }),
       },
       requestSignIn: () => notify("signIn"),
+      showSignIn: (reasons = []) => notify("signIn.show", { reasons }),
+      hideSignIn: () => notify("signIn.hide"),
       navigate: (path) => notify("navigate", { path }),
       ready: () => notify("ready"),
       challengeLink: (challenge) => request("challenge.link", challenge),
+      challengeStanding: (challenge) =>
+        request("challenge.standing", challenge),
+      challengeResult: (score) => request("challenge.result", { score }),
       roundEnded: () => notify("roundEnded"),
     };
     return game;
@@ -156,7 +165,7 @@ function standalone() {
     gameId: "",
     version: "",
     locale: lang.toLowerCase().startsWith("zh") ? "zh-CN" : "en",
-    player: { signedIn: false, name: "", avatar: "" },
+    player: { signedIn: false, name: "", avatar: "", tester: false },
     embedded: false,
     challenge: null,
     onPlayer: () => () => {},
@@ -175,6 +184,8 @@ function standalone() {
       earn: signedOut,
     },
     requestSignIn() {},
+    showSignIn() {},
+    hideSignIn() {},
     navigate(path) {
       location.href = path;
     },
@@ -183,6 +194,13 @@ function standalone() {
       Promise.reject(
         Object.assign(new Error("Challenge links work on dingn."), {
           code: "unavailable",
+        }),
+      ),
+    challengeStanding: async () => null,
+    challengeResult: () =>
+      Promise.reject(
+        Object.assign(new Error("This page was not opened from a challenge."), {
+          code: "no_challenge",
         }),
       ),
     roundEnded() {},

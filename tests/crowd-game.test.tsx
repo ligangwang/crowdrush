@@ -86,6 +86,8 @@ const calls = {
   save: vi.fn<(data: unknown) => Promise<void>>(),
   signIn: vi.fn<() => void>(),
   navigate: vi.fn<(path: string) => void>(),
+  showSignIn: vi.fn<(reasons?: string[]) => void>(),
+  hideSignIn: vi.fn<() => void>(),
 };
 function fakeSdk(signedIn: boolean, locale: Locale = "en") {
   stored = new Map();
@@ -93,6 +95,8 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
   calls.save.mockReset().mockResolvedValue(undefined);
   calls.signIn.mockReset();
   calls.navigate.mockReset();
+  calls.showSignIn.mockReset();
+  calls.hideSignIn.mockReset();
   languageListeners = new Set();
   sdk = {
     gameId: "crowd",
@@ -102,6 +106,14 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
     embedded: true,
     challenge: null,
     challengeLink: async () => "",
+    challengeStanding: async () => null,
+    challengeResult: async (score) => ({
+      beat: true,
+      posted: false,
+      best: score,
+      rank: null,
+      players: 1,
+    }),
     roundEnded: () => {},
     onPlayer: () => () => {},
     onLanguage: (fn) => {
@@ -124,6 +136,8 @@ function fakeSdk(signedIn: boolean, locale: Locale = "en") {
       earn: async (coins) => ({ coins, left: 30 - coins }),
     },
     requestSignIn: calls.signIn,
+    showSignIn: calls.showSignIn,
+    hideSignIn: calls.hideSignIn,
     navigate: calls.navigate,
     ready() {},
   };
@@ -240,11 +254,52 @@ test("a signed-in player buys upgrades with dingn coins on the start screen", as
 test("signed-out players see the upgrades, and buying asks them to sign in", async () => {
   await play({ level: "2" });
   expect(await screen.findByRole("button", { name: "Start" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /^Buy / })).toBeNull();
+  // The game has no sign-in text of its own: the buy button opens dingn's.
+  expect(document.body.textContent).not.toMatch(/sign in/i);
   fireEvent.click(
-    screen.getByRole("button", { name: "Sign in to buy Power +1" }),
+    screen.getByRole("button", { name: "Buy Power +1 for 50 coins" }),
   );
   expect(calls.signIn).toHaveBeenCalled();
+});
+
+test("a signed-out player's result shows dingn's sign-in box, not a prompt of the game's", async () => {
+  await play({ level: "3" });
+  const start = await screen.findByRole(
+    "button",
+    { name: "Start" },
+    { timeout: 5000 },
+  );
+  expect(calls.showSignIn).not.toHaveBeenCalled();
+  await act(async () => fireEvent.click(start));
+  // Half the boss beaten, then the squad falls: coins a member would earn.
+  crowd().boss.hp /= 2;
+  mocks.fall = true;
+  await screen.findByText("Squad wiped out", {}, { timeout: 3000 });
+  expect(document.body.textContent).not.toMatch(/sign in/i);
+  expect(calls.showSignIn).toHaveBeenCalledTimes(1);
+  expect(calls.showSignIn).toHaveBeenCalledWith(["rewards"]);
+  expect(calls.hideSignIn).not.toHaveBeenCalled();
+  // The box goes when the result closes.
+  mocks.fall = false;
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: /Try again|Retry/ })),
+  );
+  expect(calls.hideSignIn).toHaveBeenCalledTimes(1);
+});
+
+test("a signed-in player's result asks for no sign-in box", async () => {
+  fakeSdk(true);
+  await play({ level: "3" });
+  const start = await screen.findByRole(
+    "button",
+    { name: "Start" },
+    { timeout: 5000 },
+  );
+  await act(async () => fireEvent.click(start));
+  crowd().boss.hp /= 2;
+  mocks.fall = true;
+  await screen.findByText("Squad wiped out", {}, { timeout: 3000 });
+  expect(calls.showSignIn).not.toHaveBeenCalled();
 });
 
 test("once today's coins are collected, the road has no coin packs", async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDingn, useLocale } from "./dingn";
+import type { SignInReason } from "../sdk/dingn-sdk.js";
 import { STORE, Sfx, read, write } from "./crowd-shared";
 import {
   FREE_LEVELS,
@@ -296,6 +297,29 @@ export function CrowdGame() {
   }
   // A friend's challenge plays without an account, for the points.
   const locked = needsSignIn(level, !!user) && !friend;
+  // All sign-in prompts on a result are dingn's: the game says what signing
+  // in would have brought this round and dingn shows its sign-in box, taken
+  // away when the result closes. (The gate before a locked level keeps its
+  // own button: that level needs an account to play at all.)
+  const signInReasons: SignInReason[] =
+    user || friend
+      ? []
+      : phase === "won" && showWin
+        ? needsSignIn(level + 1, false)
+          ? ["rewards", "progress"]
+          : ["rewards"]
+        : phase === "lost" && levelCoins(world.current) > 0
+          ? ["rewards"]
+          : [];
+  const signInKey = signInReasons.join(",");
+  // A dingn from before these calls has neither, and shows nothing.
+  const signInBox = !!signInKey && !!sdk.showSignIn;
+  useEffect(() => {
+    if (!signInBox) return;
+    sdk.showSignIn?.(signInKey.split(",") as SignInReason[]);
+    return () => sdk.hideSignIn?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signInBox, signInKey]);
   const upgradeName = (kind: UpgradeKind) =>
     kind === "squad"
       ? t("Squad")
@@ -1356,9 +1380,7 @@ export function CrowdGame() {
                 <p className="crowd-shop-title">
                   {t("Upgrades")}
                   <span>
-                    {user
-                      ? t("Permanent, paid with dingn coins")
-                      : t("Sign in to buy with dingn coins")}
+                    {t("Permanent, paid with dingn coins")}
                   </span>
                 </p>
                 {UPGRADE_KINDS.map((kind) => {
@@ -1436,13 +1458,9 @@ export function CrowdGame() {
                             e.stopPropagation();
                             void buy(kind);
                           }}
-                          aria-label={
-                            user
-                              ? t(
-                                  `Buy ${name} +${next.tier} for ${next.price} coins`,
-                                )
-                              : t(`Sign in to buy ${name} +${next.tier}`)
-                          }
+                          aria-label={t(
+                            `Buy ${name} +${next.tier} for ${next.price} coins`,
+                          )}
                         >
                           <span className="crowd-shop-buy-label">
                             <span aria-hidden>▲</span> {t("Upgrade")}
@@ -1499,7 +1517,7 @@ export function CrowdGame() {
             </div>
           )}
         {phase === "won" && showWin && (
-          <div className="crowd-overlay">
+          <div className={`crowd-overlay${signInBox ? " signin-box" : ""}`}>
             <p
               className="crowd-stars"
               aria-label={t(`${result.stars} of 3 stars`)}
@@ -1515,7 +1533,7 @@ export function CrowdGame() {
                 {t("This one was for points only: no coins or progress.")}
               </p>
             )}
-            {(prize.coins || prize.limit || (!user && !friend)) && (
+            {(prize.coins || prize.limit) && (
               <p className="crowd-loss">
                 {prize.coins != null && prize.coins > 0 && (
                   <span className="crowd-loss-coins">
@@ -1536,18 +1554,6 @@ export function CrowdGame() {
                       {t("Get more coins")}
                     </button>
                   </span>
-                )}
-                {!user && (
-                  <span className="crowd-loss-note">
-                    {t("Sign in to earn coins for every level you clear.")}
-                  </span>
-                )}
-              </p>
-            )}
-            {needsSignIn(level + 1, !!user) && !friend && (
-              <p>
-                {t(
-                  "Next up: sign in to save your progress and keep playing on any device.",
                 )}
               </p>
             )}
@@ -1584,7 +1590,7 @@ export function CrowdGame() {
           </div>
         )}
         {phase === "lost" && (
-          <div className="crowd-overlay">
+          <div className={`crowd-overlay${signInBox ? " signin-box" : ""}`}>
             <h2>{t("Squad wiped out")}</h2>
             <Score score={score} friend={friend} />
             {friend && scoreOnly(level) && (
@@ -1616,11 +1622,6 @@ export function CrowdGame() {
                     >
                       {t("Get more coins")}
                     </button>
-                  </span>
-                )}
-                {!user && !friend && levelCoins(world.current) > 0 && (
-                  <span className="crowd-loss-note">
-                    {t("Sign in to earn coins for that.")}
                   </span>
                 )}
                 {user &&
