@@ -687,6 +687,17 @@ test("a lost run scores its monsters and boss damage, and minions never count", 
   assert.ok(before >= 0);
 });
 
+test("points during play count only what is earned so far", () => {
+  const k = expectedTiers(10);
+  const w = play(10, autopilot, { power: k, rate: k, squad: k });
+  const won = points(w);
+  // the same world a moment before the win: soldiers and speed not yet counted
+  const p = points({ ...w, phase: "boss" });
+  assert.equal(p.soldiers, 0);
+  assert.equal(p.speed, 0);
+  assert.equal(p.total, won.monsters + won.boss);
+});
+
 test("a slow boss kill earns no speed points", () => {
   const k = expectedTiers(10);
   const w = play(10, autopilot, { power: k, rate: k, squad: k });

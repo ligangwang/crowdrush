@@ -46,6 +46,18 @@
   border-radius: 999px;
   padding: 6px 12px;
 }
+.crowd-hud-score {
+  font-weight: 800;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: #0b1426aa;
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+.crowd-hud-score:empty {
+  display: none;
+}
 .crowd-hud-left {
   display: flex;
   gap: 6px;
