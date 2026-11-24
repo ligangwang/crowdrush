@@ -119,6 +119,11 @@ export function CrowdGame() {
   // Coins flying from a broken pack to the coin counter in the corner.
   const fliesRef = useRef<HTMLDivElement>(null);
   const walletRef = useRef<HTMLSpanElement>(null);
+  // The points earned so far, written by the game loop as they change.
+  const scoreRef = useRef<HTMLSpanElement>(null);
+  const scoreText = useRef<{ n: number; t: unknown; text: string } | null>(
+    null,
+  );
   const progressRef = useRef<HTMLDivElement>(null);
   const bossBarRef = useRef<HTMLDivElement>(null);
   const bossFillRef = useRef<HTMLDivElement>(null);
@@ -1062,6 +1067,21 @@ export function CrowdGame() {
       bossFillRef.current.dataset.hit = f.bossHit > 0 ? "1" : "";
       bossFillRef.current.textContent = String(w.boss.hp);
     }
+    // Points earned so far: monsters shot and damage to the boss. Soldiers
+    // left and the speed bonus only count once the level is won.
+    const score = scoreRef.current;
+    if (score && (w.phase === "run" || w.phase === "boss")) {
+      const n = points(w).total;
+      const tr = tRef.current;
+      let cached = scoreText.current;
+      if (!cached || cached.n !== n || cached.t !== tr)
+        cached = scoreText.current = {
+          n,
+          t: tr,
+          text: tr(`${n.toLocaleString("en-US")} points`),
+        };
+      if (score.textContent !== cached.text) score.textContent = cached.text;
+    }
   }
 
   // input
@@ -1148,6 +1168,9 @@ export function CrowdGame() {
         <div className="crowd-hud">
           <span className="crowd-hud-left">
             <span className="crowd-level">{t(`Level ${level}`)}</span>
+            {(phase === "run" || phase === "boss") && (
+              <span ref={scoreRef} className="crowd-hud-score" />
+            )}
             {(weapon.power > 1 || weapon.rapid > 0) && (
               <span
                 className="crowd-weapon"
