@@ -142,6 +142,14 @@ export function CrowdGame() {
     slamAnim: 0,
     /** Seconds since the boss was beaten, or -1 while it stands. */
     bossDown: -1,
+    /** Points the HUD has counted once the level is won; bonuses add to it. */
+    banked: 0,
+    /** The won level's points, as they stood when the boss was beaten. */
+    won: null as Points | null,
+    /** The number the HUD shows, counting up to the points earned. */
+    scoreShown: 0,
+    /** Monster points at the last look, to pulse the score on a kill. */
+    scoreKills: 0,
     clock: 0,
     acc: 0,
     shots: 0,
@@ -364,6 +372,9 @@ export function CrowdGame() {
     f.shake = 0;
     f.slamAnim = 0;
     f.bossDown = -1;
+    f.banked = 0;
+    f.scoreShown = 0;
+    f.scoreKills = 0;
     f.held = false;
     f.fight = [];
     setHeld(false);
@@ -886,6 +897,9 @@ export function CrowdGame() {
       case "won":
         // the boss staggers in a burst of explosions, then falls (bossFall)
         f.bossDown = 0;
+        // the HUD holds what play earned; bossFall flies the bonuses in
+        f.won = points(w);
+        f.banked = f.won.monsters + f.won.boss;
         f.bossHit = 1;
         f.shake = Math.max(f.shake, 0.9);
         burst(0, w.boss.z, 4, "#ffd36a", 90, 7);
@@ -925,7 +939,62 @@ export function CrowdGame() {
       burst(0, w.boss.z, 3, "#a580ff", 60, 6);
       sfx.current?.play({ type: "fanfare" });
     }
+    // the win's bonuses fly into the score before the win screen shows
+    if (crossed(BONUS_SOLDIERS))
+      flyPoints(w.x, w.z, f.won?.soldiers ?? 0, "#8fd0ff");
+    if (crossed(BONUS_SPEED))
+      flyPoints(0, w.boss.z, f.won?.speed ?? 0, "#ffd36a");
     if (crossed(BOSS_FALL)) setShowWin(true);
+  }
+
+  /**
+   * A win bonus ("+120") flying from the road to the score in the corner,
+   * which counts it in when it lands.
+   */
+  function flyPoints(x: number, z: number, value: number, color: string) {
+    if (value <= 0) return;
+    const f = fx.current;
+    const scene = sceneRef.current;
+    const root = fliesRef.current;
+    const score = scoreRef.current;
+    const land = () => {
+      f.banked += value;
+      const el = scoreRef.current;
+      if (el) el.dataset.bump = el.dataset.bump === "0" ? "1" : "0";
+    };
+    if (!scene || !root || !score) return land();
+    const el = document.createElement("span");
+    if (typeof el.animate !== "function") return land();
+    el.className = "crowd-fly-points";
+    el.textContent = `+${value.toLocaleString("en-US")}`;
+    el.style.color = color;
+    root.appendChild(el);
+    const from = scene.project(x, z, 1.4);
+    const box = root.getBoundingClientRect();
+    const to = score.getBoundingClientRect();
+    const tx = to.left - box.left + to.width / 2;
+    const ty = to.top - box.top + to.height / 2;
+    el.animate(
+      [
+        {
+          transform: `translate(${from.x}px, ${from.y}px) translate(-50%, -50%) scale(0.6)`,
+          opacity: 0,
+        },
+        {
+          transform: `translate(${from.x}px, ${from.y - 46}px) translate(-50%, -50%) scale(1.25)`,
+          opacity: 1,
+          offset: 0.35,
+        },
+        {
+          transform: `translate(${tx}px, ${ty}px) translate(-50%, -50%) scale(0.55)`,
+          opacity: 1,
+        },
+      ],
+      { duration: 620, easing: "ease-in", fill: "both" },
+    ).onfinish = () => {
+      el.remove();
+      land();
+    };
   }
 
   /**
@@ -1068,10 +1137,24 @@ export function CrowdGame() {
       bossFillRef.current.textContent = String(w.boss.hp);
     }
     // Points earned so far: monsters shot and damage to the boss. Soldiers
-    // left and the speed bonus only count once the level is won.
+    // left and the speed bonus only count once the level is won, when they
+    // fly in (flyPoints) and the number counts up to them.
     const score = scoreRef.current;
-    if (score && (w.phase === "run" || w.phase === "boss")) {
-      const n = points(w).total;
+    if (score && w.phase !== "ready" && w.phase !== "lost") {
+      const won = w.phase === "won";
+      const now = won ? null : points(w);
+      const target = now ? now.total : f.banked;
+      if (now && now.monsters !== f.scoreKills) {
+        // a monster shot down: a quick pulse
+        if (now.monsters > f.scoreKills)
+          score.dataset.bump = score.dataset.bump === "0" ? "1" : "0";
+        f.scoreKills = now.monsters;
+      }
+      f.scoreShown =
+        won && target > f.scoreShown
+          ? f.scoreShown + Math.ceil((target - f.scoreShown) * 0.2)
+          : target;
+      const n = f.scoreShown;
       const tr = tRef.current;
       let cached = scoreText.current;
       if (!cached || cached.n !== n || cached.t !== tr)
@@ -1168,7 +1251,7 @@ export function CrowdGame() {
         <div className="crowd-hud">
           <span className="crowd-hud-left">
             <span className="crowd-level">{t(`Level ${level}`)}</span>
-            {(phase === "run" || phase === "boss") && (
+            {(phase === "run" || phase === "boss" || phase === "won") && (
               <span ref={scoreRef} className="crowd-hud-score" />
             )}
             {(weapon.power > 1 || weapon.rapid > 0) && (
@@ -1402,9 +1485,7 @@ export function CrowdGame() {
               >
                 <p className="crowd-shop-title">
                   {t("Upgrades")}
-                  <span>
-                    {t("Permanent, paid with dingn coins")}
-                  </span>
+                  <span>{t("Permanent, paid with dingn coins")}</span>
                 </p>
                 {UPGRADE_KINDS.map((kind) => {
                   const next = nextUpgrade(kind, perks, level);
@@ -1685,6 +1766,10 @@ export function CrowdGame() {
     </div>
   );
 }
+
+/** Seconds after the boss is beaten when each win bonus flies to the score. */
+const BONUS_SOLDIERS = 0.5;
+const BONUS_SPEED = 1.2;
 
 /** A finished level's points, what they came from, and the friend's to beat. */
 function Score({
