@@ -811,6 +811,10 @@
 .crowd-rival.beaten {
   color: #9be7a0;
 }
+.crowd-place {
+  margin: 4px 0 0;
+  font-weight: 700;
+}
 .crowd-challenge .secondary-button {
   margin-top: 10px;
 }
