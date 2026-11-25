@@ -665,6 +665,14 @@ test("a friend's challenge opens their level with their upgrades, for points onl
   };
   // Signed in, but with no upgrades, so the friend's are more than theirs.
   sdk.rewards.shop = async () => [];
+  const result = vi.fn(async (score: number) => ({
+    beat: false,
+    posted: true,
+    best: score,
+    rank: 3,
+    players: 7,
+  }));
+  sdk.challengeResult = result;
   await play({ level: "2", best: "1" });
   // Straight to level 12, past the sign-in gate, with the friend's upgrades.
   expect(
@@ -696,6 +704,11 @@ test("a friend's challenge opens their level with their upgrades, for points onl
     ),
   ).toBeTruthy();
   expect(earn).not.toHaveBeenCalled();
+  // The points went under the friend's challenge without asking, and dingn's
+  // place for them shows.
+  expect(result).toHaveBeenCalledTimes(1);
+  expect(result.mock.calls[0][0]).toBeGreaterThanOrEqual(0);
+  expect(await screen.findByText("Place 3 of 7")).toBeTruthy();
   // Trying again keeps the challenge.
   await act(async () =>
     fireEvent.click(screen.getByRole("button", { name: "Try again" })),
@@ -709,6 +722,8 @@ test("a friend's challenge opens their level with their upgrades, for points onl
   );
   mocks.fall = true;
   await screen.findByText("Squad wiped out", {}, { timeout: 3000 });
+  // Every try is posted: dingn keeps the best.
+  expect(result).toHaveBeenCalledTimes(2);
   // Back to the player's own game: their level and upgrades.
   await act(async () =>
     fireEvent.click(screen.getByRole("button", { name: "Back to your game" })),

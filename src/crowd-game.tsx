@@ -245,6 +245,8 @@ export function CrowdGame() {
   // The finished level's points, and the round to challenge a friend with.
   const [score, setScore] = useState<Points | null>(null);
   const [played, setPlayed] = useState<Round | null>(null);
+  // The place dingn gave the finished level's points under a friend's challenge.
+  const [place, setPlace] = useState<Place | null>(null);
   /**
    * Whether the level in play is a friend's challenge played for the points
    * alone, paying, saving and easing nothing: one on a level the player
@@ -626,6 +628,17 @@ export function CrowdGame() {
           score: pts.total,
           rules: roundRules.current,
         });
+        // A friend's challenge: dingn posts a signed-in player's points under
+        // it (each player keeps their best) and says where they stand. Older
+        // dingn websites have no challengeResult.
+        setPlace(null);
+        if (challenge.current)
+          void Promise.resolve(sdkRef.current.challengeResult?.(pts.total))
+            .then((r) => {
+              if (world.current === w && r?.posted && r.rank !== null)
+                setPlace({ rank: r.rank, players: r.players });
+            })
+            .catch(() => {});
       }
       if (w.phase === "lost") lost(w);
       if (w.phase === "won" && scoreOnly(w.level)) {
@@ -1631,7 +1644,7 @@ export function CrowdGame() {
             </p>
             <h2>{t("Boss down!")}</h2>
             <p>{t(`${result.count} of your squad made it.`)}</p>
-            <Score score={score} friend={friend} />
+            <Score score={score} friend={friend} place={place} />
             {friend && scoreOnly(level) && (
               <p className="crowd-loss-note">
                 {t("This one was for points only: no coins or progress.")}
@@ -1696,7 +1709,7 @@ export function CrowdGame() {
         {phase === "lost" && (
           <div className={`crowd-overlay${signInBox ? " signin-box" : ""}`}>
             <h2>{t("Squad wiped out")}</h2>
-            <Score score={score} friend={friend} />
+            <Score score={score} friend={friend} place={place} />
             {friend && scoreOnly(level) && (
               <p className="crowd-loss-note">
                 {t("This one was for points only: no coins or progress.")}
@@ -1771,13 +1784,21 @@ export function CrowdGame() {
 const BONUS_SOLDIERS = 0.5;
 const BONUS_SPEED = 1.2;
 
-/** A finished level's points, what they came from, and the friend's to beat. */
+/** The player's place among everyone who played a challenge. */
+type Place = { rank: number; players: number };
+
+/**
+ * A finished level's points, what they came from, the friend's to beat and
+ * the place the player's best takes under the friend's challenge.
+ */
 function Score({
   score,
   friend,
+  place,
 }: {
   score: Points | null;
   friend: Round | null;
+  place: Place | null;
 }) {
   const { t } = useLocale();
   if (!score) return null;
@@ -1809,6 +1830,11 @@ function Score({
               : t(
                   `Your friend scored ${n(friend.score)}. ${n(friend.score - score.total + 1)} more to beat it.`,
                 )}
+        </p>
+      )}
+      {friend && place && (
+        <p className="crowd-place">
+          {t(`Place ${n(place.rank)} of ${n(place.players)}`)}
         </p>
       )}
     </div>
