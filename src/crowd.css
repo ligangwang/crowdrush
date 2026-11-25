@@ -55,6 +55,23 @@
   border-radius: 999px;
   padding: 6px 12px;
 }
+.crowd-hud-score[data-bump="0"] {
+  animation: crowd-bump-a 0.3s ease-out;
+}
+.crowd-hud-score[data-bump="1"] {
+  animation: crowd-bump-b 0.3s ease-out;
+}
+.crowd-fly-points {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 30px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-shadow:
+    0 2px 0 #0009,
+    0 0 8px #0008;
+}
 .crowd-hud-score:empty {
   display: none;
 }
