@@ -1,9 +1,11 @@
 /**
  * Crowd Rush 3D — a three.js view of the same world that crowd-core runs.
  *
- * Everything is built from code: low-poly meshes with flat shading, no model
- * or texture files. Characters are drawn with InstancedMesh, one mesh per
- * body part, so a squad of 140 runners costs a handful of draw calls.
+ * The characters are built from code (crowd-figures): low-poly figures with
+ * flat shading and no model files. The squad and the brutes are drawn with
+ * InstancedMesh from baked animation frames, so a squad of 140 runners costs
+ * a handful of draw calls. The land and the roadblocks are photographs and
+ * scans (crowd-land, crowd-models).
  *
  * Coordinates: crowd-core uses x in [-1, 1] across the road and z in metres
  * along it. Here X = x * ROAD, Y is up and Z = -z, so the squad runs toward
@@ -29,27 +31,22 @@ import {
   type BossKind,
   type World,
 } from "./crowd-core";
-import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { PROP_URLS, loadModel, propModel, type Props } from "./crowd-models";
 import {
-  MODEL_URLS,
-  PROP_URLS,
-  WEAPONS,
-  bake,
-  bakeHeld,
-  loadModel,
-  propGeometry,
-  propModel,
+  RUN_FRAMES,
+  bakeBrute,
+  bakeSoldier,
+  brute,
   recolor,
-  runPose,
-  standPose,
-  stompPose,
+  restOf,
+  rex,
+  rexPose,
+  warlordPose,
   type Baked,
-  type Bones,
-  type Pose,
-  type Props,
-} from "./crowd-models";
+  type Figure,
+  type Joints,
+} from "./crowd-figures";
 import {
   HAZE,
   farHills,
@@ -278,67 +275,38 @@ class Blobs {
   }
 }
 
-const RUN_FRAMES = 10;
-
-/** Low-poly runners with a cap, a rifle and swinging legs. */
+/** The squad: soldiers drawn from baked run frames, each with the squad's gun. */
 class Runners {
-  private parts: Parts;
-  private torso: THREE.InstancedMesh;
-  private head: THREE.InstancedMesh;
-  private cap: THREE.InstancedMesh;
-  private legs: THREE.InstancedMesh;
-  private arms: THREE.InstancedMesh;
-  private gun: THREE.InstancedMesh;
-  private model?: FrameSet;
+  private model: FrameSet;
   /** One gun per damage level, drawn in the runners' hands. */
-  private guns: FrameSet[] = [];
+  private guns: FrameSet[];
   constructor(
     scene: THREE.Scene,
     readonly capacity: number,
     private blobs: Blobs,
   ) {
-    const torso = new THREE.CapsuleGeometry(0.13, 0.16, 2, 6);
-    const head = new THREE.IcosahedronGeometry(0.14, 1);
-    const cap = new THREE.SphereGeometry(
-      0.15,
-      7,
-      4,
-      0,
-      Math.PI * 2,
-      0,
-      Math.PI / 2,
-    );
-    cap.translate(0, 0.01, 0);
-    const leg = new THREE.BoxGeometry(0.09, 0.28, 0.1);
-    leg.translate(0, -0.14, 0);
-    const arm = new THREE.BoxGeometry(0.07, 0.22, 0.07);
-    arm.translate(0, -0.11, 0);
-    const gun = new THREE.BoxGeometry(0.06, 0.07, 0.34);
-    const white = flat(0xffffff);
-    this.parts = new Parts(
+    const { body, guns } = bakeSoldier();
+    const scale = 1.15 / body.height;
+    this.model = new FrameSet(
       scene,
+      body,
       [
-        { geo: torso, mat: white },
-        { geo: head, mat: flat(0xffd2b0) },
-        { geo: cap, mat: white },
-        { geo: leg, mat: white, per: 2 },
-        { geo: arm, mat: white, per: 2 },
-        { geo: gun, mat: flat(0x2b2f3a) },
+        recolor(body, { jacket: 0x2f7fe0, helmet: 0x1d4f9a }),
+        recolor(body, { jacket: 0xd9363e, helmet: 0x7a1a20 }),
       ],
       capacity,
+      scale,
     );
-    [this.torso, this.head, this.cap, this.legs, this.arms, this.gun] =
-      this.parts.meshes;
-    // per-instance colours need the buffers to exist up front
-    for (const m of [this.torso, this.cap, this.legs, this.arms])
-      for (let i = 0; i < m.instanceMatrix.count; i++)
-        m.setColorAt(i, _c.set(0xffffff));
-  }
-  /** Switches from the code-built runners to the baked rifleman. */
-  useModel(set: FrameSet, guns: FrameSet[] = []) {
-    this.model = set;
-    this.guns = guns;
-    for (const m of this.parts.meshes) m.visible = false;
+    this.guns = guns.map(
+      (g) =>
+        new FrameSet(
+          scene,
+          g,
+          [g.frames[0].getAttribute("color") as THREE.BufferAttribute],
+          capacity,
+          scale,
+        ),
+    );
   }
   /** Draws a squad of `count` around road position (x, z). */
   squad(
@@ -358,74 +326,35 @@ class Runners {
     const rz = crowdDepth(n, rx);
     // the crowd bunches forward a little so its tail stays on screen
     const ahead = rz * 0.3 * facing;
-    const body = _c.set(color);
-    const dark = new THREE.Color(color).multiplyScalar(0.55);
-    const yaw = facing === 1 ? lean : Math.PI + lean;
     const model = this.model;
-    if (model) {
-      const variant = color === TEAM ? 0 : 1;
-      const gun = this.guns[Math.min(tier, this.guns.length - 1)];
-      // the rifleman faces +Z, so the squad (running toward -Z) turns round
-      const myaw = facing === 1 ? Math.PI + lean : lean;
-      for (let i = 0; i < n; i++) {
-        const s = slot(i, n, rx, rz);
-        const X = x * ROAD + s.x;
-        const Z = -z - s.z * facing - ahead;
-        const frame = running
-          ? Math.floor(((((clock * 1.5 + i * 0.37) % 1) + 1) % 1) * RUN_FRAMES)
-          : RUN_FRAMES;
-        const m = base(X, 0, Z, myaw, model.scale);
-        model.add(variant, frame, m);
-        gun?.add(0, frame, m);
-        this.blobs.add(X, Z, 0.26);
-      }
-      return;
-    }
+    const variant = color === TEAM ? 0 : 1;
+    const gun = this.guns[Math.min(tier, this.guns.length - 1)];
+    // the soldier faces +Z, so the squad (running toward -Z) turns round
+    const myaw = facing === 1 ? Math.PI + lean : lean;
     for (let i = 0; i < n; i++) {
-      const k = this.parts.used;
-      if (k >= this.parts.capacity) break;
-      this.parts.used++;
       const s = slot(i, n, rx, rz);
-      const ph = clock * 12 + i * 1.3;
-      const swing = running ? Math.sin(ph) * 0.8 : 0;
-      const bob = running ? Math.abs(Math.sin(ph)) * 0.05 : 0;
-      const bb = base(
-        x * ROAD + s.x,
-        bob,
-        -z - s.z * facing - ahead,
-        yaw,
-        1.35,
-      );
-      put(this.torso, k, bb, local(0, 0.44, 0));
-      put(this.head, k, bb, local(0, 0.71, 0));
-      put(this.cap, k, bb, local(0, 0.74, 0, -0.15));
-      put(this.legs, k * 2, bb, local(-0.065, 0.3, 0, swing));
-      put(this.legs, k * 2 + 1, bb, local(0.065, 0.3, 0, -swing));
-      // both arms reach forward to hold the rifle
-      put(this.arms, k * 2, bb, local(-0.15, 0.55, 0, 1.25, 0.25));
-      put(this.arms, k * 2 + 1, bb, local(0.15, 0.55, 0, 1.25, -0.35));
-      put(this.gun, k, bb, local(0.02, 0.52, -0.24));
-      this.torso.setColorAt(k, body);
-      this.cap.setColorAt(k, dark);
-      this.legs.setColorAt(k * 2, dark);
-      this.legs.setColorAt(k * 2 + 1, dark);
-      this.arms.setColorAt(k * 2, body);
-      this.arms.setColorAt(k * 2 + 1, body);
+      const X = x * ROAD + s.x;
+      const Z = -z - s.z * facing - ahead;
+      const frame = running
+        ? Math.floor(((((clock * 1.5 + i * 0.37) % 1) + 1) % 1) * RUN_FRAMES)
+        : RUN_FRAMES;
+      const m = base(X, 0, Z, myaw, model.scale);
+      model.add(variant, frame, m);
+      gun?.add(0, frame, m);
+      this.blobs.add(X, Z, 0.26);
     }
   }
   finish() {
-    this.model?.finish();
+    this.model.finish();
     for (const g of this.guns) g.finish();
-    this.parts.finish();
   }
 }
 
-/** Slimes and horned brutes. */
+/** Slimes and brutes. */
 class Monsters {
   private slimes: Parts;
-  private brutes: Parts;
   private bars: Parts;
-  private bruteModel?: FrameSet;
+  private bruteModel: FrameSet;
   constructor(
     scene: THREE.Scene,
     private blobs: Blobs,
@@ -453,24 +382,13 @@ class Monsters {
       ],
       120,
     );
-    const horn = new THREE.ConeGeometry(0.13, 0.55, 5);
-    horn.translate(0, 0.27, 0);
-    const fist = new THREE.DodecahedronGeometry(0.22);
-    this.brutes = new Parts(
+    const stomp = bakeBrute();
+    this.bruteModel = new FrameSet(
       scene,
-      [
-        { geo: new THREE.DodecahedronGeometry(0.72), mat: flat(0x9b5de5) },
-        { geo: horn, mat: flat(0xffe08a), per: 2 },
-        { geo: eye, mat: whiteM, per: 2 },
-        { geo: eye, mat: blackM, per: 2 },
-        { geo: fist, mat: flat(0x6a3cb0), per: 2 },
-        {
-          geo: new THREE.BoxGeometry(0.34, 0.3, 0.4),
-          mat: flat(0x4b2a86),
-          per: 2,
-        },
-      ],
-      24,
+      stomp,
+      [stomp.frames[0].getAttribute("color") as THREE.BufferAttribute],
+      32,
+      2.3 / stomp.height,
     );
     const bar = new THREE.BoxGeometry(1, 1, 1);
     this.bars = new Parts(
@@ -485,11 +403,6 @@ class Monsters {
     const fill = this.bars.meshes[1];
     for (let i = 0; i < fill.instanceMatrix.count; i++)
       fill.setColorAt(i, _c.set(0xffffff));
-  }
-  /** Switches the brutes to the baked orc. */
-  useBrute(set: FrameSet) {
-    this.bruteModel = set;
-    for (const m of this.brutes.meshes) m.visible = false;
   }
   draw(m: Monster, clock: number) {
     const hop = Math.abs(Math.sin(clock * (m.big ? 5 : 9) + m.id * 1.7));
@@ -539,7 +452,7 @@ class Monsters {
       }
       if (m.hp < m.maxHp)
         this.bar(X, 0.95 + lift, Z, 0.7, m.hp / m.maxHp, 0xff5a5f);
-    } else if (this.bruteModel) {
+    } else {
       const set = this.bruteModel;
       const frame = Math.floor(
         ((((clock * 0.9 + m.id * 0.31) % 1) + 1) % 1) * set.frames,
@@ -547,49 +460,6 @@ class Monsters {
       set.add(0, frame, base(X, 0, Z, 0, set.scale));
       this.blobs.add(X, Z, 0.6);
       this.bar(X, 2.55, Z, 1.3, m.hp / m.maxHp, 0xff9f43);
-    } else {
-      const p = this.brutes;
-      if (p.used >= p.capacity) return;
-      const k = p.used++;
-      const lift = hop * 0.25;
-      const b = base(X, 0, Z, 0, 1);
-      const [body, horns, eyes, pupils, fists, feet] = p.meshes;
-      put(body, k, b, local(0, 0.85 + lift, 0, 0.2, 0.3, 0, 1, 0.92, 0.9));
-      for (const side of [-1, 1]) {
-        const j = k * 2 + (side > 0 ? 1 : 0);
-        put(
-          horns,
-          j,
-          b,
-          local(side * 0.38, 1.38 + lift, 0, 0, 0, side * -0.55),
-        );
-        put(
-          eyes,
-          j,
-          b,
-          local(side * 0.24, 1.05 + lift, 0.55, 0, 0, 0, 0.13, 0.15, 0.08),
-        );
-        put(
-          pupils,
-          j,
-          b,
-          local(side * 0.22, 1.03 + lift, 0.62, 0, 0, 0, 0.065, 0.075, 0.04),
-        );
-        const punch = Math.sin(clock * 5 + m.id + side) * 0.15;
-        put(
-          fists,
-          j,
-          b,
-          local(side * 0.78, 0.7 + lift, 0.15 + punch, 0.4, 0.4, 0),
-        );
-        put(
-          feet,
-          j,
-          b,
-          local(side * 0.32, 0.15, 0.05 + (side > 0 ? hop : 1 - hop) * 0.12),
-        );
-      }
-      this.bar(X, 2.0 + lift, Z, 1.3, m.hp / m.maxHp, 0xff9f43);
     }
   }
   private bar(
@@ -613,9 +483,8 @@ class Monsters {
     fill.setColorAt(k, _c.set(color));
   }
   finish() {
-    this.bruteModel?.finish();
+    this.bruteModel.finish();
     this.slimes.finish();
-    this.brutes.finish();
     this.bars.finish();
   }
 }
@@ -646,126 +515,104 @@ export function bossFallPose(t: number) {
 }
 
 /**
- * A boss drawn from a model: it loops Idle or Walk (Run as a fallback) and
- * plays an attack clip, if it has one, on each ground slam; otherwise it
- * lunges forward with its jaw open. A model with no clips (the orc) is
- * posed by `pose` instead: `walk` is its stride phase, `lift` how far its
- * arms are raised for a slam.
+ * A boss drawn from a jointed figure (crowd-figures), posed afresh each
+ * frame by `pose`: `clock` runs all the time, `walk` is its stride's phase
+ * while it closes in (0 while it stands) and `lift` rises to 1 and back for
+ * each ground slam. A boss that `lunges` also throws itself forward with
+ * its jaw open on each slam.
  */
-class ModelBoss {
+class FigureBoss {
   readonly root = new THREE.Group();
-  private mats: THREE.MeshStandardMaterial[] = [];
-  private mixer: THREE.AnimationMixer;
-  private idle?: THREE.AnimationAction;
-  private walk?: THREE.AnimationAction;
-  private attack?: THREE.AnimationAction;
-  private looping?: THREE.AnimationAction;
+  private mat: THREE.MeshStandardMaterial;
+  private joints: Joints;
   private jaw?: THREE.Object3D;
-  private bones: Bones = {};
-  private rest: { bone: THREE.Bone; p: THREE.Vector3; q: THREE.Quaternion }[] =
-    [];
+  private reset: () => void;
+  private clock = 0;
   private stride = 0;
   constructor(
-    gltf: GLTF,
+    figure: Figure,
     height: number,
     private look: {
-      /** Rewrites the model's vertex colours. */
+      pose: (j: Joints, clock: number, walk: number, lift: number) => void;
+      /** Throws itself forward, jaw open, for each slam. */
+      lunges?: boolean;
+      /** Rewrites the figure's vertex colours. */
       paint?: (geo: THREE.BufferGeometry) => void;
       /** A glow that pulses with the clock, on top of the hit flash. */
       glow?: THREE.ColorRepresentation;
-      /** How brightly it flashes when hit (1: the T-Rex's flash). */
+      /** How brightly it flashes when hit (1: the rex's flash). */
       flash?: number;
-      pose?: (b: Bones, walk: number, lift: number) => void;
-    } = {},
+    },
   ) {
-    const model = cloneSkinned(gltf.scene);
-    const box = new THREE.Box3().setFromObject(model);
-    model.scale.setScalar(height / Math.max(0.1, box.max.y - box.min.y));
-    model.traverse((o) => {
-      if ((o as THREE.Bone).isBone) this.bones[o.name] = o as THREE.Bone;
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
+    this.mat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      flatShading: true,
+      roughness: 0.75,
+    });
+    this.joints = figure.joints;
+    this.jaw = figure.joints.Jaw;
+    this.reset = restOf(figure);
+    // every joint's shapes become one mesh, so a boss is a draw call a joint
+    for (const joint of Object.values(figure.joints)) {
+      const shapes = joint.children.filter(
+        (o): o is THREE.Mesh => (o as THREE.Mesh).isMesh,
+      );
+      if (!shapes.length) continue;
+      const pos: number[] = [];
+      const col: number[] = [];
+      for (const shape of shapes) {
+        shape.updateMatrix();
+        const p = shape.geometry.getAttribute("position");
+        const c = shape.geometry.getAttribute("color");
+        for (let i = 0; i < p.count; i++) {
+          _v.fromBufferAttribute(p, i).applyMatrix4(shape.matrix);
+          pos.push(_v.x, _v.y, _v.z);
+          col.push(c.getX(i), c.getY(i), c.getZ(i));
+        }
+        shape.removeFromParent();
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+      look.paint?.(geo);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, this.mat);
       mesh.castShadow = true;
       mesh.frustumCulled = false;
-      if (look.paint) {
-        mesh.geometry = mesh.geometry.clone();
-        look.paint(mesh.geometry);
-      }
-      const mat = new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        flatShading: true,
-        roughness: 0.75,
-      });
-      mesh.material = mat;
-      this.mats.push(mat);
-    });
-    this.rest = Object.values(this.bones).map((bone) => ({
-      bone,
-      p: bone.position.clone(),
-      q: bone.quaternion.clone(),
-    }));
-    const mixer = new THREE.AnimationMixer(model);
-    this.mixer = mixer;
-    const action = (...names: string[]) => {
-      const c = gltf.animations.find((a) => names.includes(a.name));
-      return c ? mixer.clipAction(c) : undefined;
-    };
-    if (!look.pose) {
-      this.idle = action("Idle");
-      this.walk = action("Walk", "Run");
-      this.attack = action("FireBreath", "Attack", "Roar", "Bite");
+      joint.add(mesh);
     }
-    if (this.attack) {
-      this.attack.setLoop(THREE.LoopOnce, 1);
-      mixer.addEventListener("finished", (e) => {
-        if (e.action === this.attack) this.attack?.fadeOut(0.25);
-      });
-    }
-    this.jaw = model.getObjectByName("Jaw");
-    this.loop(this.idle);
-    this.root.add(model);
+    look.pose(this.joints, 0, 0, 0);
+    const box = new THREE.Box3().setFromObject(figure.root);
+    this.reset();
+    figure.root.scale.setScalar(height / Math.max(0.1, box.max.y - box.min.y));
+    this.root.add(figure.root);
   }
-  private loop(next?: THREE.AnimationAction) {
-    if (!next || next === this.looping) return;
-    this.looping?.fadeOut(0.3);
-    next.reset().fadeIn(0.3).play();
-    this.looping = next;
-  }
-  update(
-    fx: SceneFx,
-    dead: number,
-    dt: number,
-    moving: boolean,
-    slammed: boolean,
-  ) {
-    this.loop(moving ? this.walk : this.idle);
-    if (slammed && this.attack) this.attack.reset().fadeIn(0.1).play();
-    // once beaten, its animation slows to a stagger, then freezes
+  update(fx: SceneFx, dead: number, dt: number, moving: boolean) {
+    // once beaten, it slows to a stagger, then freezes
     const speed = dead < 0 ? 1 : dead < 0.6 ? 0.3 : 0;
-    this.mixer.update(dt * speed);
+    this.clock += dt * speed;
+    if (moving) this.stride += dt * 0.9 * speed;
     const glow = this.look.glow
       ? _c
           .set(this.look.glow)
           .multiplyScalar(0.35 + 0.2 * Math.sin(fx.clock * 5))
       : _c.setRGB(0, 0, 0);
     const hit = fx.bossHit * (this.look.flash ?? 1);
-    for (const m of this.mats)
-      m.emissive.setRGB(
-        glow.r + hit * 0.35,
-        glow.g + hit * 0.1,
-        glow.b + hit * 0.05,
-      );
+    this.mat.emissive.setRGB(
+      glow.r + hit * 0.35,
+      glow.g + hit * 0.1,
+      glow.b + hit * 0.05,
+    );
     const lift = fx.slamAnim > 0.5 ? (1 - fx.slamAnim) * 2 : fx.slamAnim * 2;
-    if (this.look.pose) {
-      if (moving) this.stride += dt * 0.9 * speed;
-      for (const r of this.rest) {
-        r.bone.position.copy(r.p);
-        r.bone.quaternion.copy(r.q);
-      }
-      this.look.pose(this.bones, moving ? this.stride : 0, lift);
-    }
-    // without an attack clip or a pose of its own, each slam is a lunge
-    const lunge = this.attack || this.look.pose ? 0 : lift;
+    this.reset();
+    // (a stride of exactly 0 stands still, so a walking one never is)
+    this.look.pose(
+      this.joints,
+      this.clock,
+      moving ? (this.stride % 1) + 1e-4 : 0,
+      lift,
+    );
+    const lunge = this.look.lunges ? lift : 0;
     const fall = bossFallPose(dead);
     if (this.jaw) this.jaw.rotation.x += lunge * 0.7 + fall.roar;
     const model = this.root;
@@ -815,26 +662,9 @@ export function infernoPaint(geo: THREE.BufferGeometry) {
 }
 
 /**
- * The Orc Warlord: stomps in with the orc brute's stride, and for each slam
- * heaves both fists overhead and hammers them down.
- */
-export const warlordPose = (b: Bones, walk: number, lift: number) => {
-  stompPose(b, walk);
-  for (const [arm, side] of [
-    [b.LeftArm, -1],
-    [b.RightArm, 1],
-  ] as const) {
-    if (!arm) continue;
-    arm.rotation.x -= lift * 2.2;
-    arm.rotation.z += side * lift * -0.7;
-  }
-  if (b.Spine) b.Spine.rotation.x -= lift * 0.35;
-};
-
-/**
  * The boss at the end of the road. Every BOSS_LEVELS levels a different one
- * waits there (see BOSSES in crowd-core); until the models load, all of
- * them are drawn as the code-built Horned Titan.
+ * waits there (see BOSSES in crowd-core). The Horned Titan is built here;
+ * the others are figures from crowd-figures.
  */
 class Boss {
   group = new THREE.Group();
@@ -954,16 +784,35 @@ class Boss {
     g.rotation.y = 0;
     this.group.add(g);
     scene.add(this.group);
+    this.useLook(
+      "rex",
+      new FigureBoss(rex(), 6, { pose: rexPose, lunges: true }),
+    );
+    this.useLook(
+      "inferno",
+      new FigureBoss(rex(), 6.4, {
+        pose: rexPose,
+        lunges: true,
+        paint: infernoPaint,
+        glow: 0x5a1404,
+        flash: 0.3,
+      }),
+    );
+    this.useLook(
+      "warlord",
+      new FigureBoss(brute(true), 5.6, {
+        pose: (j, _clock, walk, lift) => warlordPose(j, walk, lift),
+        glow: 0x3a0606,
+      }),
+    );
   }
-  private looks: Partial<Record<BossKind, ModelBoss>> = {};
+  private looks: Partial<Record<BossKind, FigureBoss>> = {};
   private kind: BossKind = "rex";
-  private shown?: ModelBoss;
-  private lastSlam = 0;
+  private shown?: FigureBoss;
   private lastZ = 0;
   private moving = 0;
-  /** Adds the model drawn for one kind of boss. */
-  useModel(kind: BossKind, look: ModelBoss) {
-    this.looks[kind]?.root.removeFromParent();
+  /** Adds the figure drawn for one kind of boss. */
+  private useLook(kind: BossKind, look: FigureBoss) {
     this.looks[kind] = look;
     look.root.visible = false;
     this.group.add(look.root);
@@ -988,9 +837,7 @@ class Boss {
       this.lastZ = w.boss.z;
       this.moving =
         step > 0.0001 && step < 1 ? 0.4 : Math.max(0, this.moving - dt);
-      const slammed = fx.slamAnim > this.lastSlam + 0.5;
-      this.lastSlam = fx.slamAnim;
-      this.shown.update(fx, dead, dt, this.moving > 0, slammed);
+      this.shown.update(fx, dead, dt, this.moving > 0);
       return;
     }
     const lift = fx.slamAnim > 0.5 ? (1 - fx.slamAnim) * 2 : fx.slamAnim * 2;
@@ -1757,126 +1604,27 @@ export class CrowdScene {
   }
 
   /**
-   * Loads the Polyfork models and swaps them in. Until they arrive, or if
-   * they fail to load, the code-built characters stay on screen.
+   * Loads the scanned roadblocks and swaps them in. Until they arrive, or
+   * if one fails to load, its plain stand-in box stays on screen.
    */
   async loadModels(progress?: (url: string, share: number) => void) {
     const get = (url: string) =>
       loadModel(url, (k) => progress?.(url, k)).finally(() =>
         progress?.(url, 1),
       );
-    // the guns and roadblocks download alongside the characters; a missing
-    // roadblock keeps its plain stand-in box
-    const guns = Promise.allSettled(WEAPONS.map((wp) => get(wp.url)));
-    const props = Promise.allSettled([
+    const [barrier, crate, ammo] = await Promise.allSettled([
       get(PROP_URLS.barrier),
       get(PROP_URLS.crate),
       get(PROP_URLS.ammo),
-    ]).then(([barrier, crate, ammo]) => {
-      if (barrier.status === "fulfilled")
-        this.props.barrier = propModel(barrier.value);
-      // the scan has a closed crate (parts ending "_a") and an open one
-      if (crate.status === "fulfilled")
-        this.props.crate = propModel(crate.value, (n) => n.endsWith("_a"));
-      if (ammo.status === "fulfilled") this.props.ammo = propModel(ammo.value);
-      if (!this.disposed) this.rebuildBlocks();
-    });
-    const [runner, brute, boss] = await Promise.all([
-      get(MODEL_URLS.runner),
-      get(MODEL_URLS.brute),
-      get(MODEL_URLS.boss),
     ]);
-    // a missing gun model just leaves the squad on its last good weapon
-    const weapons = await guns;
     if (this.disposed) return;
-    const phases = Array.from({ length: RUN_FRAMES }, (_, i) => i / RUN_FRAMES);
-    const pose: Pose = (b, p) => (p < 0 ? standPose(b, 0) : runPose(b, p));
-    const allPhases = [...phases, -1];
-    // the gun is baked on its own so it can be swapped as the squad upgrades
-    const rifleFrames = bake(
-      runner,
-      pose,
-      allPhases,
-      (name) => !name.includes("righthand"),
-    );
-    const gunFrames = [rifleFrames];
-    for (const [i, r] of weapons.entries()) {
-      if (r.status !== "fulfilled") break;
-      const wp = WEAPONS[i];
-      gunFrames.push(
-        bakeHeld(
-          runner,
-          pose,
-          allPhases,
-          propGeometry(r.value),
-          wp.length,
-          wp.flip,
-        ),
-      );
-    }
-    // the last frame is the rifleman standing still before the run starts
-    const runFrames = bake(
-      runner,
-      pose,
-      allPhases,
-      (name) => name.includes("face") || name.includes("righthand"),
-    );
-    const team = recolor(runFrames, {
-      "top-mesh": 0x2f7fe0,
-      "hat-mesh": 0x1d4f9a,
-    });
-    const rival = recolor(runFrames, {
-      "top-mesh": 0xd9363e,
-      "hat-mesh": 0x7a1a20,
-    });
-    const scale = 1.15 / Math.max(runFrames.height, rifleFrames.height);
-    this.runners.useModel(
-      new FrameSet(
-        this.scene,
-        runFrames,
-        [team, rival],
-        this.runners.capacity,
-        scale,
-      ),
-      gunFrames.map(
-        (g) =>
-          new FrameSet(
-            this.scene,
-            g,
-            [g.frames[0].getAttribute("color") as THREE.BufferAttribute],
-            this.runners.capacity,
-            scale,
-          ),
-      ),
-    );
-    const bruteFrames = bake(
-      brute,
-      stompPose,
-      Array.from({ length: 8 }, (_, i) => i / 8),
-    );
-    this.monsters.useBrute(
-      new FrameSet(
-        this.scene,
-        bruteFrames,
-        [bruteFrames.frames[0].getAttribute("color") as THREE.BufferAttribute],
-        32,
-        2.3 / bruteFrames.height,
-      ),
-    );
-    this.boss.useModel("rex", new ModelBoss(boss, 6));
-    this.boss.useModel(
-      "inferno",
-      new ModelBoss(boss, 6.4, {
-        paint: infernoPaint,
-        glow: 0x5a1404,
-        flash: 0.3,
-      }),
-    );
-    this.boss.useModel(
-      "warlord",
-      new ModelBoss(brute, 5.6, { pose: warlordPose, glow: 0x3a0606 }),
-    );
-    await props;
+    if (barrier.status === "fulfilled")
+      this.props.barrier = propModel(barrier.value);
+    // the scan has a closed crate (parts ending "_a") and an open one
+    if (crate.status === "fulfilled")
+      this.props.crate = propModel(crate.value, (n) => n.endsWith("_a"));
+    if (ammo.status === "fulfilled") this.props.ammo = propModel(ammo.value);
+    this.rebuildBlocks();
     this.modelsReady = true;
   }
   modelsReady = false;
@@ -1891,13 +1639,7 @@ export class CrowdScene {
   async preload(onProgress: (share: number) => void) {
     // weights roughly by download size: a model is a few pictures' worth
     const MODEL = 4;
-    const urls = [
-      MODEL_URLS.runner,
-      MODEL_URLS.brute,
-      MODEL_URLS.boss,
-      ...WEAPONS.map((wp) => wp.url),
-      ...Object.values(PROP_URLS),
-    ];
+    const urls = Object.values(PROP_URLS);
     const shares = new Map(urls.map((u) => [u, 0]));
     let files = 0;
     let sky = 0;
