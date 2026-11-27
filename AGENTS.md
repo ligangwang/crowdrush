@@ -19,5 +19,8 @@ Notes for AI coding agents working on Crowd Rush.
   new string to every pack (a test checks they all have the same keys and
   placeholders). The player can switch language mid-game (`sdk.onLanguage`),
   so read text through `t()` at render time, not once into state.
-- The 3D models are Polyfork CC BY 4.0: list any new model in
-  `public/models/CREDITS.md`.
+- The characters (soldiers, guns, brutes, bosses) are built from code in
+  `src/crowd-figures.ts` and are the game's own. Keep it that way: add no
+  model or picture whose licence asks for credit (CC BY and the like). The
+  land and roadblocks are CC0 files from Poly Haven; list any new file in
+  `public/models/CREDITS.md` with its licence.

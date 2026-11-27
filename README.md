@@ -53,5 +53,6 @@ into the game. Run `npm run update-sdk` to refresh it. The full guide is at
 
 ## Credits
 
-The 3D models are from [Polyfork](https://polyfork.dev), used under CC BY 4.0.
-See [public/models/CREDITS.md](public/models/CREDITS.md).
+The characters are built from code and are the game's own. The land and the
+roadblocks are CC0 files from Poly Haven, so nothing in the game needs a
+credit. See [public/models/CREDITS.md](public/models/CREDITS.md).
